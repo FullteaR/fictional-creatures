@@ -1,4 +1,5 @@
 *.safetensors
+.DS_Store
 src/__pycache__
 src/unsloth_compiled_cache
 src/endemic
