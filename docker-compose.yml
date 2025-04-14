@@ -1,0 +1,18 @@
+services:
+        endemic:
+               build:
+                       context: .
+               image: frt/endemic
+               container_name: endemic
+               shm_size: '128g'
+               mem_limit: '110g'
+               ports:
+                       - 127.0.0.1:28080:8888
+               volumes:
+                       - ./src:/mnt
+               deploy:
+                       resources:
+                               reservations:
+                                     devices:
+                                       - count: all
+                                         capabilities: [gpu]
