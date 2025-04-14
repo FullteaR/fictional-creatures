@@ -5,17 +5,12 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y git libaio-dev libmpich-dev bu
 
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN pip install jupyter\
-	scikit-learn\
-	gekko\
-	wikipedia\
 	numpy\
-	pandas\
-	flash_attn\
-	mpi4py\
 	unsloth\
 	janome\
 	python-Levenshtein\
-	matplotlib
+	matplotlib\
+	compel
 
 RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
 WORKDIR /bitsandbytes
