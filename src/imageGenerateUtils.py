@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 import random
 
 def get_image(prompt, pipe):
-    negative_prompt = "bad quality,worst quality,worst detail,sketch,censor,logo,alphabet,watermark,nsfw,1girl,human"
+    negative_prompt = "bad quality,worst quality,worst detail, sketch, censor,logo, alphabet, watermark, nsfw, 3d, copyright, signature, jpeg"
     compel = Compel(
         truncate_long_prompts=False,
         tokenizer=[pipe.tokenizer, pipe.tokenizer_2] ,

@@ -10,20 +10,19 @@ RUN pip install jupyter\
 	janome\
 	python-Levenshtein\
 	matplotlib\
-	compel
+	compel\
+	bitsandbytes
 
-RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
-WORKDIR /bitsandbytes
-RUN cmake -DCOMPUTE_BACKEND=cuda -S .
-RUN make -j32
-RUN pip install .
+#RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
+#WORKDIR /bitsandbytes
+#RUN cmake -DCOMPUTE_BACKEND=cuda -S .
+#RUN make -j32
+#RUN pip install .
 
 
 WORKDIR /
 RUN pip install git+https://github.com/huggingface/optimum.git
 RUN pip install git+https://github.com/huggingface/transformers.git
-RUN pip install auto-gptq --no-build-isolation
-
 
 
 
