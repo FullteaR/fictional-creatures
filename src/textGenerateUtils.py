@@ -1,7 +1,19 @@
 from transformers import TextStreamer
 from sampleMonsters import *
+from imageGenerateUtils import get_image
 import gc
 import torch
+
+
+def _extract_images(messages):
+    images = []
+    for msg in messages:
+        content = msg.get("content", [])
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image":
+                    images.append(item["image"])
+    return images
 
 def generate_scientific_name(target, description, model, tokenizer):
     messages = [
@@ -75,7 +87,7 @@ def generate_scientific_name(target, description, model, tokenizer):
     return generate_text(messages, model, tokenizer)
 
 
-def generate_prompt(target, description, model, tokenizer):
+def generate_prompt(target, description, model, tokenizer, pipe):
     sample_prompt = """
     masterpiece, best quality, absurdres, intricate cave system, vast underground cavern, damp and misty atmosphere, rugged cave walls, uneven rocky surfaces, small flying insects swarming, faint bioluminescent glow, scattered moss patches, luminescent fungi, hanging roots, water droplets falling from stalactites, quiet and eerie ambiance, hidden crevices, ancient untouched cave, faint echoes, cold and humid air, mysterious and unexplored, tiny fast-moving creatures clinging to walls, large round reflective eyes, twitching limbs, blurry movement, sharp focus on one specimen, watchful gaze, poised to strike at passing insect, stark contrast of delicate organism and rough stone, discovery scene, flashlight beam illuminating creature, sense of rare encounter, scientific expedition vibe
     """
@@ -89,7 +101,7 @@ def generate_prompt(target, description, model, tokenizer):
         }
         
     ]
-    return generate_text(messages, model, tokenizer)
+    return generate_text_with_image_feedback(messages, model, tokenizer, pipe)
 
 
 def generate_description(target, model, tokenizer):
@@ -142,11 +154,22 @@ def generate_description(target, model, tokenizer):
 
 
 def generate_text_(messages, model, tokenizer):
+    images = _extract_images(messages)
+
     text = tokenizer.apply_chat_template(
         messages,
         add_generation_prompt = True, # Must add for generation
     )
-    inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+    if images:
+        inputs = tokenizer(
+            text=[text],
+            images=images,
+            return_tensors="pt",
+        ).to(model.device)
+    else:
+        inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
     output = model.generate(
         **inputs,
         max_new_tokens = 1024, # Increase for longer outputs!
@@ -156,7 +179,11 @@ def generate_text_(messages, model, tokenizer):
     )
     
     output = output.cpu()
-    result = tokenizer.decode(output[0])[len(text):].replace("<end_of_turn>", "")
+    if images:
+        input_length = inputs["input_ids"].shape[1]
+        result = tokenizer.decode(output[0][input_length:]).replace("<end_of_turn>", "")
+    else:
+        result = tokenizer.decode(output[0])[len(text):].replace("<end_of_turn>", "")
     del inputs, output
     gc.collect()
     torch.cuda.empty_cache()
@@ -178,6 +205,29 @@ def generate_text(messages, model, tokenizer):
             "role": "user",
             "content": [
                 {"type" : "text", "text" : f"今の回答を60点として、userの指示に沿った100点の回答をしてください。改善点等の解説はせず、回答のみを答えてください。長さを水増しするのではなく中身の質を上げてください。"}
+            ]
+        }
+    )
+    return generate_text_(messages, model, tokenizer)
+
+
+def generate_text_with_image_feedback(messages, model, tokenizer, pipe):
+    out1 = generate_text_(messages, model, tokenizer)
+    image = get_image(out1.strip(), pipe)
+    messages.append(
+        {
+            "role": "assistant",
+            "content": [
+                {"type" : "text", "text": out1}
+            ]
+        }
+    )
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {"type" : "image", "image": image},
+                {"type" : "text", "text" : "これは今のプロンプトから生成された画像です。今の回答を60点として、userの指示に沿った100点の回答をしてください。改善点等の解説はせず、回答のみを答えてください。長さを水増しするのではなく中身の質を上げてください。"}
             ]
         }
     )
