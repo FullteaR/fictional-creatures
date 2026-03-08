@@ -1,7 +1,9 @@
 from transformers import TextStreamer
 from sampleMonsters import *
+import base64
 import gc
 import torch
+from io import BytesIO
 
 def generate_scientific_name(target, description, model, tokenizer):
     messages = [
@@ -182,8 +184,11 @@ def generate_text(messages, model, tokenizer, pipe=None):
     if pipe is not None:
         from imageGenerateUtils import get_image
         image = get_image(out1.strip(), pipe)
+        buf = BytesIO()
+        image.save(buf, format="PNG")
+        data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
         feedback_content = [
-            {"type": "image", "image": image},
+            {"type": "image", "image": data_url},
             {"type": "text", "text": feedback_text},
         ]
     else:
