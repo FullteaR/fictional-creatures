@@ -1,7 +1,10 @@
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel
+FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel
 ENV TORCH_CUDA_ARCH_LIST "8.6"
 RUN apt update && apt upgrade -y && apt -y autoremove
 RUN DEBIAN_FRONTEND=noninteractive apt install -y git libaio-dev libmpich-dev build-essential
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN pip install jupyter\
