@@ -75,7 +75,7 @@ def generate_scientific_name(target, description, model, tokenizer):
     return generate_text(messages, model, tokenizer)
 
 
-def generate_prompt(target, description, model, tokenizer):
+def generate_prompt(target, description, model, tokenizer, pipe=None):
     sample_prompt = """
     masterpiece, best quality, absurdres, intricate cave system, vast underground cavern, damp and misty atmosphere, rugged cave walls, uneven rocky surfaces, small flying insects swarming, faint bioluminescent glow, scattered moss patches, luminescent fungi, hanging roots, water droplets falling from stalactites, quiet and eerie ambiance, hidden crevices, ancient untouched cave, faint echoes, cold and humid air, mysterious and unexplored, tiny fast-moving creatures clinging to walls, large round reflective eyes, twitching limbs, blurry movement, sharp focus on one specimen, watchful gaze, poised to strike at passing insect, stark contrast of delicate organism and rough stone, discovery scene, flashlight beam illuminating creature, sense of rare encounter, scientific expedition vibe
     """
@@ -89,7 +89,7 @@ def generate_prompt(target, description, model, tokenizer):
         }
         
     ]
-    return generate_text(messages, model, tokenizer)
+    return generate_text(messages, model, tokenizer, pipe=pipe)
 
 
 def generate_description(target, model, tokenizer):
@@ -141,9 +141,20 @@ def generate_description(target, model, tokenizer):
 
 
 
+def normalize_messages(messages):
+    result = []
+    for msg in messages:
+        content = msg["content"]
+        if isinstance(content, list):
+            has_image = any(item.get("type") in ("image", "image_url") for item in content)
+            if not has_image:
+                content = "".join(item["text"] for item in content if item.get("type") == "text")
+        result.append({**msg, "content": content})
+    return result
+
 def generate_text_(messages, model, tokenizer):
     text = tokenizer.apply_chat_template(
-        messages,
+        normalize_messages(messages),
         add_generation_prompt = True, # Must add for generation
     )
     inputs = tokenizer([text], return_tensors="pt").to(model.device)
@@ -163,22 +174,20 @@ def generate_text_(messages, model, tokenizer):
     torch.cuda.ipc_collect()
     return result.strip()
 
-def generate_text(messages, model, tokenizer):
+def generate_text(messages, model, tokenizer, pipe=None):
     out1 = generate_text_(messages, model, tokenizer)
-    messages.append(
-        {
-            "role": "assistant",
-            "content": [
-                {"type" : "text", "text": out1}
-            ]
-        }
-    )
-    messages.append(
-        {
-            "role": "user",
-            "content": [
-                {"type" : "text", "text" : f"今の回答を60点として、userの指示に沿った100点の回答をしてください。改善点等の解説はせず、回答のみを答えてください。長さを水増しするのではなく中身の質を上げてください。"}
-            ]
-        }
-    )
+    messages.append({"role": "assistant", "content": out1})
+
+    feedback_text = "今の回答を60点として、userの指示に沿った100点の回答をしてください。改善点等の解説はせず、回答のみを答えてください。長さを水増しするのではなく中身の質を上げてください。"
+    if pipe is not None:
+        from imageGenerateUtils import get_image
+        image = get_image(out1.strip(), pipe)
+        feedback_content = [
+            {"type": "image", "image": image},
+            {"type": "text", "text": feedback_text},
+        ]
+    else:
+        feedback_content = feedback_text
+
+    messages.append({"role": "user", "content": feedback_content})
     return generate_text_(messages, model, tokenizer)
