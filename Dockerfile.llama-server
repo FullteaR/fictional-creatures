@@ -1,0 +1,19 @@
+FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel
+
+RUN apt-get update && apt-get install -y \
+    pciutils \
+    build-essential \
+    cmake \
+    curl \
+    libcurl4-openssl-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/ggml-org/llama.cpp && \
+    cmake llama.cpp -B llama.cpp/build \
+        -DBUILD_SHARED_LIBS=OFF -DGGML_CUDA=ON -DLLAMA_CURL=ON && \
+    cmake --build llama.cpp/build --config Release -j --clean-first \
+        --target llama-server llama-gguf-split && \
+    cp llama.cpp/build/bin/llama-* llama.cpp
+
+ENV PATH="/llama.cpp:$PATH"

@@ -19,7 +19,9 @@ services:
     restart: "no"
 
   llama-server:
-    image: ghcr.io/ggerganov/llama.cpp:server-cuda
+    build:
+      context: .
+      dockerfile: Dockerfile.llama-server
     volumes:
       - ./models:/models
     ports:
