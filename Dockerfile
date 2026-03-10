@@ -4,20 +4,36 @@ RUN apt update && apt upgrade -y && apt -y autoremove
 RUN DEBIAN_FRONTEND=noninteractive apt install -y git libaio-dev libmpich-dev build-essential python3-venv
 
 RUN python -m venv /opt/venv
+
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN python -m pip install --upgrade pip setuptools wheel
-RUN pip install \
-	openai \
-	numpy \
-	janome \
-	python-Levenshtein \
-	matplotlib \
-	compel \
-	diffusers \
-	accelerate \
-	transformers \
-	tqdm
+RUN pip install jupyter\
+	numpy\
+	unsloth\
+	janome\
+	python-Levenshtein\
+	matplotlib\
+	compel\
+	bitsandbytes
+
+#RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
+#WORKDIR /bitsandbytes
+#RUN cmake -DCOMPUTE_BACKEND=cuda -S .
+#RUN make -j32
+#RUN pip install .
+
+
+WORKDIR /
+RUN pip install git+https://github.com/huggingface/optimum.git
+RUN pip install git+https://github.com/huggingface/transformers.git
+
+
+
+WORKDIR /
+RUN mkdir -p /root/.jupyter && touch /root/.jupyter/jupyter_notebook_config.py
+RUN echo "c.NotebookApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
+ echo c.NotebookApp.open_browser = False >> /root/.jupyter/jupyter_notebook_config.py
 
 WORKDIR /mnt
-CMD python main.py
+CMD jupyter notebook --allow-root --NotebookApp.token='' --ServerApp.iopub_msg_rate_limit=2000 --ServerApp.rate_limit_window=10
