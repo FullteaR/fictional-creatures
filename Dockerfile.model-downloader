@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+
+RUN pip install -q huggingface_hub hf_transfer
+
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+
+CMD ["hf", "download", "unsloth/Qwen3.5-35B-A3B-GGUF", "--local-dir", "/models", "--include", "*UD-Q4_K_XL*"]

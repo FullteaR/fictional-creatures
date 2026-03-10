@@ -1,21 +1,10 @@
 services:
   model-downloader:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.model-downloader
     volumes:
       - ./models:/models
-    environment:
-      - HF_HUB_ENABLE_HF_TRANSFER=1
-    command: >
-      sh -c "
-        if ls /models/*UD-Q4_K_XL*.gguf 1>/dev/null 2>&1; then
-          echo 'Model already downloaded, skipping.';
-        else
-          pip install -q huggingface_hub hf_transfer &&
-          hf download unsloth/Qwen3.5-35B-A3B-GGUF
-            --local-dir /models
-            --include '*UD-Q4_K_XL*';
-        fi
-      "
     restart: "no"
 
   llama-server:
@@ -26,14 +15,6 @@ services:
       - ./models:/models
     ports:
       - "8080:8080"
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "llama-server
-        --model $(ls /models/*UD-Q4_K_XL*.gguf | sort | head -1)
-        --ctx-size 4096
-        --n-gpu-layers 99
-        --host 0.0.0.0
-        --port 8080"
     depends_on:
       model-downloader:
         condition: service_completed_successfully
