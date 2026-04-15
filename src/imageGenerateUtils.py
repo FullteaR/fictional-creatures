@@ -1,32 +1,42 @@
-from compel import Compel, ReturnedEmbeddingsType
+from compel import CompelForSDXL
 from janome.tokenizer import Tokenizer
 from PIL import Image, ImageDraw
 import random
+import torch
 
 def get_image(prompt, pipe):
     negative_prompt = "bad quality,worst quality,worst detail, sketch, censor,logo, alphabet, watermark, nsfw, 3d, copyright, signature, jpeg"
-    compel = Compel(
-        truncate_long_prompts=False,
-        tokenizer=[pipe.tokenizer, pipe.tokenizer_2] ,
-        text_encoder=[pipe.text_encoder, pipe.text_encoder_2],
-        returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
-        requires_pooled=[False, True]
-    )  
-    prompt_embed, prompt_pooled = compel(prompt)
-    negative_embed, negative_pooled = compel(negative_prompt)
-    [prompt_embed, negative_embed] = compel.pad_conditioning_tensors_to_same_length([prompt_embed, negative_embed])
-    image = pipe(
-        prompt_embeds=prompt_embed, 
-        pooled_prompt_embeds=prompt_pooled, 
-        negative_prompt_embeds=negative_embed, 
-        negative_pooled_prompt_embeds=negative_pooled, 
+
+    compel = CompelForSDXL(pipe)
+
+    # float16 の SDPA (flash/mem_efficient) はオーバーフローして NaN になる。
+    # math kernel は低速だが数値的に安定。
+    with torch.backends.cuda.sdp_kernel(
+        enable_flash=False, enable_math=True, enable_mem_efficient=False
+    ):
+        cond = compel(prompt, negative_prompt=negative_prompt)
+
+    latents = pipe(
+        prompt_embeds=cond.embeds,
+        pooled_prompt_embeds=cond.pooled_embeds,
+        negative_prompt_embeds=cond.negative_embeds,
+        negative_pooled_prompt_embeds=cond.negative_pooled_embeds,
         width=800,
         height=480,
         guidance_scale=6,
         num_inference_steps=50,
-        max_sequence_length=2048
-    ).images[0]
-    return image
+        output_type="latent",
+    ).images
+
+    # VAE decode も float16 では NaN → float32 で実行
+    pipe.vae.to(torch.float32)
+    with torch.no_grad():
+        decoded = pipe.vae.decode(
+            latents.to(torch.float32) / pipe.vae.config.scaling_factor
+        ).sample
+    pixels = (decoded / 2 + 0.5).clamp(0, 1)
+    image_np = (pixels[0].permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")
+    return Image.fromarray(image_np)
 
 
 def getTextWidth(text, font):
@@ -83,7 +93,7 @@ def add_caption(name, description, scientific_name, image, title_font, paragraph
     max_line_width = max([getTextWidth(l, paragraph_font) for l in lines] + [getTextWidth(name, title_font)+getTextWidth(scientific_name, scientific_font)])
 
     im_w, im_h = image.size
-    
+
     x = random.choice([random.randint(20, 70), random.randint(im_w-max_line_width-70, im_w-max_line_width-20)])
     y = random.choice([random.randint(30, 80), random.randint(im_h-total_height-60, im_h-total_height-10)])
     padding = 10

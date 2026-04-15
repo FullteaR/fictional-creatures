@@ -3,21 +3,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.model-downloader
+    container_name: model-downloader
     volumes:
       - ./models:/models
-    restart: "no"
 
   llama-server:
     build:
       context: .
       dockerfile: Dockerfile.llama-server
+    container_name: llama-server
+    depends_on:
+      model-downloader:
+        condition: service_completed_successfully
     volumes:
       - ./models:/models
     ports:
       - "8080:8080"
-    depends_on:
-      model-downloader:
-        condition: service_completed_successfully
     deploy:
       resources:
         reservations:
@@ -30,11 +31,14 @@ services:
     container_name: endemic
     shm_size: '128g'
     mem_limit: '110g'
+    ports:
+      - "28080:8888"
     volumes:
       - ./src:/mnt
+    environment:
+      - LLAMA_SERVER_URL=${LLAMA_SERVER_URL:-http://llama-server:8080/v1}
     depends_on:
-      llama-server:
-        condition: service_started
+      - llama-server
     deploy:
       resources:
         reservations:

@@ -1,21 +1,23 @@
-FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel
+FROM nvidia/cuda:12.6.3-devel-ubuntu22.04
 
-RUN apt-get update && apt-get install -y \
-    pciutils \
-    build-essential \
-    cmake \
-    curl \
-    libcurl4-openssl-dev \
-    git \
+RUN apt update && apt install -y \
+    git cmake build-essential libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/ggml-org/llama.cpp && \
-    cmake llama.cpp -B llama.cpp/build \
-        -DBUILD_SHARED_LIBS=OFF -DGGML_CUDA=ON -DLLAMA_CURL=ON && \
-    cmake --build llama.cpp/build --config Release -j --clean-first \
-        --target llama-server llama-gguf-split && \
-    cp llama.cpp/build/bin/llama-* llama.cpp
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /llama.cpp
 
-ENV PATH="/llama.cpp:$PATH"
+WORKDIR /
+RUN cmake llama.cpp -B llama.cpp/build -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF \
+    && cmake --build llama.cpp/build --clean-first --config Release -j8 --target llama-server
 
-CMD ["sh", "-c", "llama-server --model $(ls /models/*UD-Q4_K_XL*.gguf | sort | head -1) --ctx-size 4096 --n-gpu-layers 99 --host 0.0.0.0 --port 8080"]
+ENV PATH="/llama.cpp/build/bin:$PATH"
+ENTRYPOINT ["llama-server"]
+CMD [ \
+    "--model", "/models/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf", \
+    "--mmproj", "/models/mmproj-F16.gguf", \
+    "--host", "0.0.0.0", \
+    "--port", "8080", \
+    "-ngl", "99", \
+    "--ctx-size", "32768", \
+    "--alias", "local-model" \
+]

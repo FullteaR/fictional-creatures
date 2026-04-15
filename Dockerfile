@@ -14,8 +14,10 @@ RUN pip install jupyter\
 	janome\
 	python-Levenshtein\
 	matplotlib\
-	compel\
-	bitsandbytes
+	"compel>=2.0.6"\
+	bitsandbytes\
+	qwen-vl-utils\
+	openai
 
 #RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
 #WORKDIR /bitsandbytes
@@ -26,7 +28,8 @@ RUN pip install jupyter\
 
 WORKDIR /
 RUN pip install git+https://github.com/huggingface/optimum.git
-RUN pip install git+https://github.com/huggingface/transformers.git
+# Pin transformers to a stable version: git HEAD broke CLIPTextModel.text_model which compel relies on
+RUN pip install "transformers==4.49.0"
 
 
 

@@ -1,21 +1,13 @@
 import re
 import os
+import base64
+from io import BytesIO
 from openai import OpenAI
 from sampleMonsters import *
 
 LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://llama-server:8080/v1")
-client = OpenAI(base_url=LLAMA_SERVER_URL, api_key="none")
-
-
-def normalize_messages_for_openai(messages):
-    result = []
-    for msg in messages:
-        content = msg["content"]
-        if isinstance(content, list):
-            # Qwen3.5-35B-A3B is text-only; drop image parts
-            content = "".join(item["text"] for item in content if item.get("type") == "text")
-        result.append({"role": msg["role"], "content": content})
-    return result
+_client = OpenAI(base_url=LLAMA_SERVER_URL, api_key="dummy")
+_MODEL = "local-model"
 
 
 def strip_thinking(text):
@@ -24,17 +16,21 @@ def strip_thinking(text):
 
 
 def call_llm(messages):
-    response = client.chat.completions.create(
-        model="qwen3.5",
-        messages=normalize_messages_for_openai(messages),
-        max_tokens=1024,
+    response = _client.chat.completions.create(
+        model=_MODEL,
+        messages=messages,
+        max_tokens=8192,
         temperature=0.7,
         top_p=0.95,
     )
-    return strip_thinking(response.choices[0].message.content)
+    msg = response.choices[0].message
+    result = msg.content or ""
+    print(result)
+    return strip_thinking(result)
 
 
-def generate_text(messages, pipe=None):
+
+def generate_text(messages):
     out1 = call_llm(messages)
     messages.append({"role": "assistant", "content": out1})
     messages.append({
@@ -94,7 +90,7 @@ def generate_scientific_name(target, description):
     return generate_text(messages)
 
 
-def generate_prompt(target, description, pipe=None):
+def generate_prompt(target, description):
     sample_prompt = """
     masterpiece, best quality, absurdres, intricate cave system, vast underground cavern, damp and misty atmosphere, rugged cave walls, uneven rocky surfaces, small flying insects swarming, faint bioluminescent glow, scattered moss patches, luminescent fungi, hanging roots, water droplets falling from stalactites, quiet and eerie ambiance, hidden crevices, ancient untouched cave, faint echoes, cold and humid air, mysterious and unexplored, tiny fast-moving creatures clinging to walls, large round reflective eyes, twitching limbs, blurry movement, sharp focus on one specimen, watchful gaze, poised to strike at passing insect, stark contrast of delicate organism and rough stone, discovery scene, flashlight beam illuminating creature, sense of rare encounter, scientific expedition vibe
     """
@@ -104,7 +100,36 @@ def generate_prompt(target, description, pipe=None):
             "content": f"アンカラ洞窟にて観測される架空の生物「ザトン」は以下のような生物です。\n\n{Kyomuton}\n\nそしてこの生物のイメージを描くためのプロンプトが以下のとおりです。\n\n{sample_prompt}\n\n。これにならって、以下のような{target}のイメージを描くためのプロンプトを英語で作成してください。\n\n{description}\n\n生物が大型の場合はその動物を中心に、小型の場合は生息地を中心とした絵を描くようにしてください。プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます"
         }
     ]
-    return generate_text(messages, pipe=pipe)
+    return generate_text(messages)
+
+
+def refine_prompt_with_image(prompt, image, target, description):
+    """生成画像を踏まえてプロンプトを改善する。"""
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        f"これは「{target}」を描くために以下のプロンプトで生成した画像です。\n\n"
+                        f"プロンプト: {prompt}\n\n"
+                        f"生物の説明: {description}\n\n"
+                        "この画像を見て、生物の説明をより正確に反映するようプロンプトを改善してください。"
+                        "改善したプロンプトのみを英語で答えてください。解説は不要です。あなたの出力はそのままStable Diffusionに渡されます。"
+                    ),
+                },
+            ],
+        }
+    ]
+    return call_llm(messages)
 
 
 def generate_description(target):
