@@ -13,7 +13,7 @@ RUN cmake llama.cpp -B llama.cpp/build -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF \
 ENV PATH="/llama.cpp/build/bin:$PATH"
 ENTRYPOINT ["llama-server"]
 CMD [ \
-    "--model", "/models/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf", \
+    "--model", "/models/Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf", \
     "--mmproj", "/models/mmproj-F16.gguf", \
     "--host", "0.0.0.0", \
     "--port", "8080", \
