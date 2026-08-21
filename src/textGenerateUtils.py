@@ -10,23 +10,21 @@ _client = OpenAI(base_url=LLAMA_SERVER_URL, api_key="dummy")
 _MODEL = "local-model"
 
 
-def strip_thinking(text):
-    """Qwen3.5の<think>ブロックを除去する"""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
 
 def call_llm(messages):
-    response = _client.chat.completions.create(
+    stream = _client.chat.completions.create(
         model=_MODEL,
         messages=messages,
-        max_tokens=8192,
-        temperature=0.7,
-        top_p=0.95,
+        stream=True
     )
-    msg = response.choices[0].message
-    result = msg.content or ""
-    print(result)
-    return strip_thinking(result)
+    chunks = []
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content or ""
+        if delta:
+            print(delta, end="", flush=True)
+            chunks.append(delta)
+    print()
+    return "".join(chunks)
 
 
 
