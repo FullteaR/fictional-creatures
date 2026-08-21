@@ -10,19 +10,31 @@ _MODEL = "local-model"
 
 
 
-def call_llm(messages):
+def call_llm(messages, max_tokens=2048):
+    # max_tokens は必須。無いと Q2_K_XL が繰り返しループに落ちたときに 32k の
+    # コンテキストを使い切るまで走り続け、llama-server が OOM で kill される。
+    # temperature / top_p / top_k / min_p は llama-server 側 (Dockerfile) で指定。
     stream = _client.chat.completions.create(
         model=_MODEL,
         messages=messages,
+        max_tokens=max_tokens,
         stream=True
     )
     chunks = []
+    finish_reason = None
     for chunk in stream:
-        delta = chunk.choices[0].delta.content or ""
+        if not chunk.choices:
+            continue
+        choice = chunk.choices[0]
+        delta = choice.delta.content or ""
         if delta:
             print(delta, end="", flush=True)
             chunks.append(delta)
+        if choice.finish_reason:
+            finish_reason = choice.finish_reason
     print()
+    if finish_reason == "length":
+        print(f"[warn] max_tokens={max_tokens} に到達して打ち切られました（繰り返しループの可能性）")
     return "".join(chunks)
 
 
@@ -90,12 +102,12 @@ def generate_scientific_name(target, description):
 
 def generate_prompt(target, description):
     sample_prompt = """
-    masterpiece, best quality, absurdres, intricate cave system, vast underground cavern, damp and misty atmosphere, rugged cave walls, uneven rocky surfaces, small flying insects swarming, faint bioluminescent glow, scattered moss patches, luminescent fungi, hanging roots, water droplets falling from stalactites, quiet and eerie ambiance, hidden crevices, ancient untouched cave, faint echoes, cold and humid air, mysterious and unexplored, tiny fast-moving creatures clinging to walls, large round reflective eyes, twitching limbs, blurry movement, sharp focus on one specimen, watchful gaze, poised to strike at passing insect, stark contrast of delicate organism and rough stone, discovery scene, flashlight beam illuminating creature, sense of rare encounter, scientific expedition vibe
+    intricate cave system, vast underground cavern, damp misty air, rugged cave walls, uneven rocky surfaces, small flying insects, pale fungi, scattered moss patches, hanging roots, water droplets on stalactites, cold humid air, ancient untouched cave, a tiny creature clinging to the wall, large round eyes, thin twitching limbs, one specimen shown clearly, poised to strike at a passing insect, delicate organism against rough stone, plain background, specimen study
     """
     messages = [
         {
             "role": "user",
-            "content": f"アンカラ洞窟にて観測される架空の生物「ザトン」は以下のような生物です。\n\n{Kyomuton}\n\nそしてこの生物のイメージを描くためのプロンプトが以下のとおりです。\n\n{sample_prompt}\n\n。これにならって、以下のような{target}のイメージを描くためのプロンプトを英語で作成してください。\n\n{description}\n\n生物が大型の場合はその動物を中心に、小型の場合は生息地を中心とした絵を描くようにしてください。プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます"
+            "content": f"アンカラ洞窟にて観測される架空の生物「ザトン」は以下のような生物です。\n\n{Kyomuton}\n\nそしてこの生物のイメージを描くためのプロンプトが以下のとおりです。\n\n{sample_prompt}\n\n。これにならって、以下のような{target}のイメージを描くためのプロンプトを英語で作成してください。\n\n{description}\n\n生物が大型の場合はその動物を中心に、小型の場合は生息地を中心とした絵を描くようにしてください。プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます。\n\n画風・画質・照明の指定は別途こちらで付与するので、あなたは生物の形態と生息環境の描写だけを書いてください。masterpiece, best quality, absurdres, 8k, ultra-detailed のような品質タグや、cinematic, dramatic lighting, volumetric lighting, glowing のような演出タグは一切使わないでください"
         }
     ]
     return call_llm(messages)
@@ -120,8 +132,12 @@ def refine_prompt_with_image(prompt, image, target, description):
                         f"これは「{target}」を描くために以下のプロンプトで生成した画像です。\n\n"
                         f"プロンプト: {prompt}\n\n"
                         f"生物の説明: {description}\n\n"
-                        "この画像を見て、生物の説明をより正確に反映するようプロンプトを改善してください。"
-                        "改善したプロンプトのみを英語で答えてください。解説は不要です。あなたの出力はそのままStable Diffusionに渡されます。"
+                        "この画像と生物の説明を見比べ、食い違っている点を洗い出したうえで、"
+                        "説明をより正確に反映するようプロンプトを書き直してください。"
+                        "書き直したプロンプトのみを英語で答えてください。解説は不要です。あなたの出力はそのままStable Diffusionに渡されます。\n\n"
+                        "画風・画質・照明の指定はこちら側で別途付与するので、あなたは生物の形態と生息環境の描写だけを書いてください。"
+                        "masterpiece, best quality, absurdres, 8k, ultra-detailed のような品質タグや、"
+                        "cinematic, dramatic lighting, volumetric lighting, glowing のような演出タグは一切使わないでください。"
                     ),
                 },
             ],

@@ -4,10 +4,14 @@ RUN pip install -q huggingface_hub hf_transfer
 
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
+# mmproj だけ ggml-org から取る: unsloth/Qwen3.8-27B-GGUF 直下の mmproj-F16.gguf は
+# 中身が Qwen3.5-35B-A3B 用 (projection_dim=2048) で、Qwen3.8-27B の n_embd=5120 と
+# 合わず llama-server が起動に失敗する。ggml-org 版は projection_dim=5120 で正しい。
+
 CMD ["python", "-c", \
 "from huggingface_hub import hf_hub_download; \
-hf_hub_download('unsloth/Qwen3.5-35B-A3B-GGUF', \
-    'Qwen3.5-35B-A3B-UD-Q2_K_XL.gguf', local_dir='/models'); \
-hf_hub_download('unsloth/Qwen3.5-35B-A3B-GGUF', \
-    'mmproj-F16.gguf', local_dir='/models'); \
+hf_hub_download('unsloth/Qwen3.8-27B-GGUF', \
+    'Qwen3.8-27B-UD-Q4_K_S.gguf', local_dir='/models'); \
+hf_hub_download('ggml-org/Qwen3.8-27B-GGUF', \
+    'mmproj-Qwen3.8-27B-Q8_0.gguf', local_dir='/models'); \
 "]

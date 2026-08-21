@@ -17,7 +17,23 @@ DIFFUSION_MODEL = os.environ.get("COMFYUI_DIFFUSION_MODEL", "novaAnimeAM_v40.saf
 TEXT_ENCODER = os.environ.get("COMFYUI_TEXT_ENCODER", "qwen_3_06b_base.safetensors")
 VAE = os.environ.get("COMFYUI_VAE", "qwen_image_vae.safetensors")
 
-NEGATIVE_PROMPT = "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia"
+# 画風はコード側で固定する。LLM に任せると毎回ぶれる上、放っておくと
+# masterpiece / 8k / cinematic 系の「盛る」タグを足してきて AI 絵になる。
+STYLE_PREFIX = (
+    "naturalist field guide plate, flat illustration, matte finish, "
+    "muted limited palette, soft even diffuse light, low contrast, no glare, "
+    "clear readable silhouette, legible anatomical structure, "
+    "restrained composition, quiet and understated"
+)
+
+NEGATIVE_PROMPT = (
+    "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia, "
+    # ここから下が「AI 絵っぽさ」の除去。演出・発光・過剰レンダリングを潰す
+    "glowing, neon, bloom, lens flare, god rays, volumetric lighting, hdr, "
+    "oversaturated, high contrast, dramatic lighting, cinematic, vignette, "
+    "airbrushed, plastic sheen, glossy, wet look, 3d render, photorealistic, "
+    "hyperdetailed, busy background"
+)
 
 # Anima の対応解像度は 512〜1536px。5:3 で生成してから 800x480 に縮小する
 GEN_WIDTH, GEN_HEIGHT = 1280, 768
@@ -75,7 +91,7 @@ def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=G
     if seed is None:
         seed = random.randint(0, 2 ** 63 - 1)
 
-    workflow = _build_workflow(prompt, negative_prompt, width, height, seed, steps, cfg)
+    workflow = _build_workflow(f"{STYLE_PREFIX}, {prompt}", negative_prompt, width, height, seed, steps, cfg)
     prompt_id = _request("/prompt", {"prompt": workflow})["prompt_id"]
 
     deadline = time.time() + timeout

@@ -12,16 +12,22 @@ RUN cmake llama.cpp -B llama.cpp/build -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF \
 
 ENV PATH="/llama.cpp/build/bin:$PATH"
 ENTRYPOINT ["llama-server"]
+# Qwen3.8 は既定で thinking mode (reasoning_effort=xhigh) に入り、短い生成でも
+# 思考だけでトークンを使い切って content が空になる。用途が短文生成なので off にし、
+# サンプリングは Qwen 公式の non-thinking (instruct) 推奨値に合わせる。
+# ctx は VRAM が厳しい (LLM 14.3 + mmproj 0.9 + ComfyUI 5.7 GiB) ため 16384 に抑える。
 CMD [ \
-    "--model", "/models/Qwen3.5-35B-A3B-UD-Q2_K_XL.gguf", \
-    "--mmproj", "/models/mmproj-F16.gguf", \
+    "--model", "/models/Qwen3.8-27B-UD-Q4_K_S.gguf", \
+    "--mmproj", "/models/mmproj-Qwen3.8-27B-Q8_0.gguf", \
     "--host", "0.0.0.0", \
     "--port", "8080", \
     "-ngl", "99", \
-    "--temp", "0.6", \
-    "--top-p", "0.95", \
+    "--reasoning", "off", \
+    "--temp", "0.7", \
+    "--top-p", "0.8", \
     "--top-k", "20", \
-    "--min-p", "0.00", \
-    "--ctx-size", "32768", \
+    "--min-p", "0.0", \
+    "--presence-penalty", "1.5", \
+    "--ctx-size", "16384", \
     "--alias", "local-model" \
 ]
