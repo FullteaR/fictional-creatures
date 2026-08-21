@@ -1,0 +1,23 @@
+FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel
+
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI /comfyui
+
+WORKDIR /comfyui
+# requirements.txt lists torch/torchvision/torchaudio unpinned; the base image
+# already satisfies them, so pip keeps the CUDA build instead of pulling a CPU wheel.
+# --break-system-packages: the base image's conda python is PEP 668 externally-managed,
+# and a venv would cut us off from that preinstalled CUDA torch.
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+# kornia_rs のビルド済み wheel は AVX2 前提。このホストは QEMU 汎用 CPU (SSE4.2 まで) なので
+# import した瞬間に SIGILL でプロセスごと落ちる。kornia は requirements.txt 上でも
+# "non essential" 扱いなので削除し、comfy_extras/nodes_post_processing.py は
+# ImportError でスキップさせる（本ワークフローでは未使用）。
+RUN pip uninstall -y --break-system-packages kornia kornia_rs
+
+EXPOSE 8188
+CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]

@@ -26,6 +26,22 @@ services:
             - count: all
               capabilities: [gpu]
 
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile.comfyui
+    container_name: comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      - ./models/comfyui:/comfyui/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - count: all
+              capabilities: [gpu]
+
   app:
     build: .
     container_name: endemic
@@ -37,8 +53,10 @@ services:
       - ./src:/mnt
     environment:
       - LLAMA_SERVER_URL=${LLAMA_SERVER_URL:-http://llama-server:8080/v1}
+      - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
     depends_on:
       - llama-server
+      - comfyui
     deploy:
       resources:
         reservations:
