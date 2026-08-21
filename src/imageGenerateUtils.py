@@ -5,12 +5,11 @@ import random
 import torch
 
 def get_image(prompt, pipe):
-    negative_prompt = "bad quality,worst quality,worst detail, sketch, censor,logo, alphabet, watermark, nsfw, 3d, copyright, signature, jpeg"
+    negative_prompt = "lowres,early,monochrome,greyscale,worst quality,bad_quality,normal quality,lowres,anatomical nonsense,bad anatomy,anatomical nonsense,watermark,simple background,transparent,bad_feet,bad_hands,logo,text,bad_anatomy,signature,face backlighting,(worst quality, bad quality:1.2),jpeg artifacts,censored,extra digit,ugly,deformed anatomy,bad proportions"
 
     compel = CompelForSDXL(pipe)
 
-    # float16 の SDPA (flash/mem_efficient) はオーバーフローして NaN になる。
-    # math kernel は低速だが数値的に安定。
+
     with torch.backends.cuda.sdp_kernel(
         enable_flash=False, enable_math=True, enable_mem_efficient=False
     ):
