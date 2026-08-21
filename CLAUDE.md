@@ -54,14 +54,13 @@ Anima ships as three separate files, so all three loaders are needed — a singl
 
 ### Image models
 
-Weights live under `./models/comfyui/` (gitignored) in ComfyUI's standard layout:
+Weights live under `./models/comfyui/` (gitignored) in ComfyUI's standard layout. Anima is the only image model kept locally — an SDXL-family checkpoint would go in `checkpoints/` and need a `CheckpointLoaderSimple` workflow instead of the three loaders below:
 
 | Path | File | Source |
 |------|------|--------|
 | `diffusion_models/` | `novaAnimeAM_v40.safetensors` (3.9GB, Anima arch, 2.09B params) | [Civitai: Nova Anime AM](https://civitai.com/models/2604424) |
 | `text_encoders/` | `qwen_3_06b_base.safetensors` (1.2GB) | [HF: circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) |
 | `vae/` | `qwen_image_vae.safetensors` (243MB) | same HF repo |
-| `checkpoints/` | `novaAnimeXL_ilV190.safetensors` (6.5GB, Illustrious/SDXL) | [Civitai: Nova Anime XL](https://civitai.com/models/376130) — kept as a fallback; needs a `CheckpointLoaderSimple` workflow |
 
 ### LLM client (`textGenerateUtils.py`)
 
