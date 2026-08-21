@@ -1,39 +1,17 @@
-FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel
-ENV TORCH_CUDA_ARCH_LIST "8.6"
-RUN apt update && apt upgrade -y && apt -y autoremove
-RUN DEBIAN_FRONTEND=noninteractive apt install -y git libaio-dev libmpich-dev build-essential python3-venv
+FROM python:3.12-slim
 
-RUN python -m venv /opt/venv
-
-ENV PATH="/opt/venv/bin:$PATH"
-
-RUN python -m pip install --upgrade pip setuptools wheel
-RUN pip install jupyter\
-	numpy\
-	unsloth\
-	janome\
-	python-Levenshtein\
-	matplotlib\
-	"compel>=2.0.6"\
-	bitsandbytes\
-	qwen-vl-utils\
+# 推論はすべて別コンテナ (llama-server / comfyui) に HTTP で投げるので、
+# このコンテナに GPU も PyTorch も要らない。ここはオーケストレーション専用。
+RUN pip install --no-cache-dir \
+	jupyter \
+	numpy \
+	matplotlib \
+	tqdm \
+	Pillow \
+	janome \
+	python-Levenshtein \
 	openai
 
-#RUN git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git /bitsandbytes
-#WORKDIR /bitsandbytes
-#RUN cmake -DCOMPUTE_BACKEND=cuda -S .
-#RUN make -j32
-#RUN pip install .
-
-
-WORKDIR /
-RUN pip install git+https://github.com/huggingface/optimum.git
-# Pin transformers to a stable version: git HEAD broke CLIPTextModel.text_model which compel relies on
-RUN pip install "transformers==4.49.0"
-
-
-
-WORKDIR /
 RUN mkdir -p /root/.jupyter && touch /root/.jupyter/jupyter_notebook_config.py
 RUN echo "c.NotebookApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
  echo c.NotebookApp.open_browser = False >> /root/.jupyter/jupyter_notebook_config.py

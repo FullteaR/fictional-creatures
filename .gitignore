@@ -2,8 +2,8 @@
 *.gguf
 .DS_Store
 src/__pycache__
-src/unsloth_compiled_cache
 src/endemic
 src/.ipynb_checkpoints
+src/smoke_test_comfyui.png
 models/*
 !models/.gitkeep

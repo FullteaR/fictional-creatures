@@ -86,8 +86,8 @@ Uses the `openai` Python client pointed at the local llama-server (`LLAMA_SERVER
 | `model-downloader` | `Dockerfile.model-downloader` | One-shot: downloads GGUF from HuggingFace |
 | `llama-server` | `Dockerfile.llama-server` | Builds llama.cpp from source, serves Qwen3.5 |
 | `comfyui` | `Dockerfile.comfyui` | ComfyUI from git master, serves image generation on 8188 |
-| `app` | `Dockerfile` | JupyterLab + Python ML stack (unsloth, diffusers, etc.) |
+| `app` | `Dockerfile` | JupyterLab only — orchestrates the other two over HTTP |
 
-The `app` and `comfyui` containers both use `pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel`; `app` sets `TORCH_CUDA_ARCH_LIST=8.6` (Ampere/RTX 30xx).
+`comfyui` uses `pytorch/pytorch:2.10.0-cuda13.0-cudnn9-devel`. `app` is plain `python:3.12-slim` and needs **no GPU and no PyTorch** — since both models moved behind HTTP, its only dependencies are jupyter, matplotlib, tqdm, Pillow, janome, python-Levenshtein and openai. Anything reintroducing in-process inference there would need the GPU reservation and CUDA base image back.
 
-`llama-server` and `comfyui` share one GPU. On a 24GB card the Q2_K_XL LLM plus Anima (~5GB of weights) fits, but ComfyUI's own offloading is what keeps it under the limit — if you move to a larger quant or a bigger image model, expect OOM.
+Only `llama-server` and `comfyui` touch the GPU. On a 24GB card the Q2_K_XL LLM plus Anima (~5.7GB measured) fits; Q4_K_XL (21GB) does not fit alongside ComfyUI.
