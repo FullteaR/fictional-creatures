@@ -27,14 +27,13 @@ def call_llm(messages):
 
 
 
-def generate_text(messages):
-    out1 = call_llm(messages)
-    messages.append({"role": "assistant", "content": out1})
-    messages.append({
-        "role": "user",
-        "content": "今の回答を60点として、userの指示に沿った100点の回答をしてください。改善点等の解説はせず、回答のみを答えてください。長さを水増しするのではなく中身の質を上げてください。"
-    })
-    return call_llm(messages)
+def first_line(text):
+    """複数行で返ってきた場合に先頭の非空行だけを採用する"""
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return text.strip()
 
 
 def generate_scientific_name(target, description):
@@ -84,7 +83,9 @@ def generate_scientific_name(target, description):
             "content": f"{target}の学名を考えてください。2単語で。見た瞬間に意味がわかるようなわかりやすいものは避けてください。学名のみを答えてください"
         },
     ]
-    return generate_text(messages)
+    # 学名は2単語固定。万一複数行で返ってきても先頭行だけ採る
+    # (長文が混ざると add_caption の max_line_width を支配してレイアウトが壊れる)
+    return first_line(call_llm(messages))
 
 
 def generate_prompt(target, description):
@@ -97,7 +98,7 @@ def generate_prompt(target, description):
             "content": f"アンカラ洞窟にて観測される架空の生物「ザトン」は以下のような生物です。\n\n{Kyomuton}\n\nそしてこの生物のイメージを描くためのプロンプトが以下のとおりです。\n\n{sample_prompt}\n\n。これにならって、以下のような{target}のイメージを描くためのプロンプトを英語で作成してください。\n\n{description}\n\n生物が大型の場合はその動物を中心に、小型の場合は生息地を中心とした絵を描くようにしてください。プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます"
         }
     ]
-    return generate_text(messages)
+    return call_llm(messages)
 
 
 def refine_prompt_with_image(prompt, image, target, description):
@@ -160,4 +161,4 @@ def generate_description(target):
             "content": f"いいですね。次は{target}について3から5行程度で教えて下さい。markdown等は使用せず文章のみで回答してください"
         }
     ]
-    return generate_text(messages)
+    return call_llm(messages)

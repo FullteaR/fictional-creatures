@@ -161,10 +161,16 @@ def add_caption(name, description, scientific_name, image, title_font, paragraph
     max_line_width = max([getTextWidth(l, paragraph_font) for l in lines] + [getTextWidth(name, title_font)+getTextWidth(scientific_name, scientific_font)])
 
     im_w, im_h = image.size
-
-    x = random.choice([random.randint(20, 70), random.randint(im_w-max_line_width-70, im_w-max_line_width-20)])
-    y = random.choice([random.randint(30, 80), random.randint(im_h-total_height-60, im_h-total_height-10)])
     padding = 10
+
+    def place(near_lo, near_hi, far_lo, far_hi, limit):
+        """手前寄せ / 奥寄せをランダムに選ぶ。想定より長いテキストが来ても
+        描画開始位置が画像の外に出ないようクランプする"""
+        pos = random.choice([random.randint(near_lo, near_hi), random.randint(far_lo, far_hi)])
+        return max(padding, min(pos, limit)) if limit >= padding else padding
+
+    x = place(20, 70, im_w-max_line_width-70, im_w-max_line_width-20, im_w-max_line_width-padding)
+    y = place(30, 80, im_h-total_height-60, im_h-total_height-10, im_h-total_height-padding)
     bg_color = (0, 0, 0, 128)
     background_box = (x - padding, y - padding,
                           x + max_line_width + padding,

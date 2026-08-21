@@ -38,13 +38,12 @@ Image model weights are **not** downloaded automatically — see *Image models* 
 
 1. **Name**: `MarkovMonsterNameGenerator` (bigram Markov chain) generates a Japanese katakana name, rejecting names too similar (Levenshtein distance ≤ 1-2) to training names.
 2. **Target string**: Combines random habitat (`fields`) + random species type (`spicies`) + name into a description target like `「深海にて観測される架空の魚「ミロカルガン」」`.
-3. **Text generation** (`textGenerateUtils.py`): Three LLM calls using few-shot prompting with `sampleMonsters.py` examples:
+3. **Text generation** (`textGenerateUtils.py`): one LLM call each, few-shot prompted with `sampleMonsters.py` examples:
    - `generate_description`: 3-5 sentence Japanese description
    - `generate_prompt`: English image prompt (comma-separated descriptors; Anima's Qwen text encoder has no 77-token limit, so long prompts pass through intact)
-   - `generate_scientific_name`: Two-word Latin scientific name
-   - All text generation uses a self-refinement loop (`generate_text`): generates once, then asks the model to improve its own answer ("今の回答を60点として…100点の回答を").
-4. **Image generation** (`imageGenerateUtils.py`): POSTs a ComfyUI API-format workflow to `comfyui:8188`, polls `/history/{prompt_id}`, fetches the PNG via `/view`. Generates at 1280×768 and downscales to 800×480.
-5. **Captioning** (`imageGenerateUtils.py:add_caption`): Uses `janome` for Japanese word-boundary tokenization to wrap description text, overlays semi-transparent rounded rectangle at a random corner of the image.
+   - `generate_scientific_name`: two-word Latin scientific name, reduced to its first line
+4. **Image generation** (`imageGenerateUtils.py`): POSTs a ComfyUI API-format workflow to `comfyui:8188`, polls `/history/{prompt_id}`, fetches the PNG via `/view`. Generates at 1280×768 and downscales to 800×480. A draft image is generated first, fed back to the model by `refine_prompt_with_image` (the LLM sees its own output and rewrites the prompt), and the refined prompt produces the final image. **This is the only refinement pass in the pipeline** — an earlier blanket self-refinement loop over every text call was removed; it doubled the LLM calls and, on the scientific name, "improved" a two-word binomial into a paragraph of Japanese, whose width then pushed the whole caption off the canvas.
+5. **Captioning** (`imageGenerateUtils.py:add_caption`): Uses `janome` for Japanese word-boundary tokenization to wrap description text, overlays semi-transparent rounded rectangle at a random corner of the image. The corner offsets are clamped to the canvas, so unexpectedly long text degrades to a top-left caption rather than being drawn off-screen.
 
 ### Image client (`imageGenerateUtils.py`)
 
