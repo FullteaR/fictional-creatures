@@ -20,7 +20,7 @@ VAE = os.environ.get("COMFYUI_VAE", "qwen_image_vae.safetensors")
 # 画風はコード側で固定する。LLM に任せると毎回ぶれる上、放っておくと
 # masterpiece / 8k / cinematic 系の「盛る」タグを足してきて AI 絵になる。
 STYLE_PREFIX = (
-    "naturalist field guide plate, flat illustration, matte finish, "
+    "naturalist field guide illustration, unlabeled, flat illustration, matte finish, "
     "muted limited palette, soft even diffuse light, low contrast, no glare, "
     "clear readable silhouette, legible anatomical structure, "
     "restrained composition, quiet and understated"
@@ -32,7 +32,10 @@ NEGATIVE_PROMPT = (
     "glowing, neon, bloom, lens flare, god rays, volumetric lighting, hdr, "
     "oversaturated, high contrast, dramatic lighting, cinematic, vignette, "
     "airbrushed, plastic sheen, glossy, wet look, 3d render, photorealistic, "
-    "hyperdetailed, busy background"
+    "hyperdetailed, busy background, "
+    # 図版スタイルは「解説文が刷り込まれたページ」を呼び込むので、文字類を明示的に潰す
+    "text, letters, words, caption, label, title, typography, handwriting, "
+    "watermark, signature, logo, page number, printed page, book page"
 )
 
 # Anima の対応解像度は 512〜1536px。5:3 で生成してから 800x480 に縮小する
