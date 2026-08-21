@@ -1,41 +1,110 @@
-from compel import CompelForSDXL
+import io
+import json
+import os
+import random
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
 from janome.tokenizer import Tokenizer
 from PIL import Image, ImageDraw
-import random
-import torch
 
-def get_image(prompt, pipe):
-    negative_prompt = "lowres,early,monochrome,greyscale,worst quality,bad_quality,normal quality,lowres,anatomical nonsense,bad anatomy,anatomical nonsense,watermark,simple background,transparent,bad_feet,bad_hands,logo,text,bad_anatomy,signature,face backlighting,(worst quality, bad quality:1.2),jpeg artifacts,censored,extra digit,ugly,deformed anatomy,bad proportions"
+COMFYUI_URL = os.environ.get("COMFYUI_URL", "http://comfyui:8188").rstrip("/")
 
-    compel = CompelForSDXL(pipe)
+# Anima は拡散モデル / テキストエンコーダ / VAE が別ファイルに分かれている
+DIFFUSION_MODEL = os.environ.get("COMFYUI_DIFFUSION_MODEL", "novaAnimeAM_v40.safetensors")
+TEXT_ENCODER = os.environ.get("COMFYUI_TEXT_ENCODER", "qwen_3_06b_base.safetensors")
+VAE = os.environ.get("COMFYUI_VAE", "qwen_image_vae.safetensors")
+
+NEGATIVE_PROMPT = "worst quality, low quality, score_1, score_2, score_3, blurry, jpeg artifacts, sepia"
+
+# Anima の対応解像度は 512〜1536px。5:3 で生成してから 800x480 に縮小する
+GEN_WIDTH, GEN_HEIGHT = 1280, 768
+OUT_WIDTH, OUT_HEIGHT = 800, 480
+
+# Nova Anime AM v4.0 の作者推奨は Euler a / Normal / steps 20-30 / CFG 4-6。
+# Anima 公式テンプレートの既定は euler / simple なので、そちらに戻すこともできる。
+SAMPLER = os.environ.get("COMFYUI_SAMPLER", "euler_ancestral")
+SCHEDULER = os.environ.get("COMFYUI_SCHEDULER", "normal")
+STEPS = int(os.environ.get("COMFYUI_STEPS", "30"))
+CFG = float(os.environ.get("COMFYUI_CFG", "5.0"))
 
 
-    with torch.backends.cuda.sdp_kernel(
-        enable_flash=False, enable_math=True, enable_mem_efficient=False
-    ):
-        cond = compel(prompt, negative_prompt=negative_prompt)
+def _build_workflow(prompt, negative_prompt, width, height, seed, steps, cfg):
+    """Anima 公式テンプレート相当のワークフローを ComfyUI の API 形式で組み立てる"""
+    return {
+        "unet": {"class_type": "UNETLoader",
+                 "inputs": {"unet_name": DIFFUSION_MODEL, "weight_dtype": "default"}},
+        "clip": {"class_type": "CLIPLoader",
+                 "inputs": {"clip_name": TEXT_ENCODER, "type": "stable_diffusion", "device": "default"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": VAE}},
+        "positive": {"class_type": "CLIPTextEncode",
+                     "inputs": {"text": prompt, "clip": ["clip", 0]}},
+        "negative": {"class_type": "CLIPTextEncode",
+                     "inputs": {"text": negative_prompt, "clip": ["clip", 0]}},
+        "latent": {"class_type": "EmptyLatentImage",
+                   "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "sampler": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": steps, "cfg": cfg,
+            "sampler_name": SAMPLER, "scheduler": SCHEDULER, "denoise": 1.0,
+            "model": ["unet", 0], "positive": ["positive", 0],
+            "negative": ["negative", 0], "latent_image": ["latent", 0]}},
+        "decode": {"class_type": "VAEDecode",
+                   "inputs": {"samples": ["sampler", 0], "vae": ["vae", 0]}},
+        "save": {"class_type": "SaveImage",
+                 "inputs": {"filename_prefix": "endemic", "images": ["decode", 0]}},
+    }
 
-    latents = pipe(
-        prompt_embeds=cond.embeds,
-        pooled_prompt_embeds=cond.pooled_embeds,
-        negative_prompt_embeds=cond.negative_embeds,
-        negative_pooled_prompt_embeds=cond.negative_pooled_embeds,
-        width=800,
-        height=480,
-        guidance_scale=6,
-        num_inference_steps=50,
-        output_type="latent",
-    ).images
 
-    # VAE decode も float16 では NaN → float32 で実行
-    pipe.vae.to(torch.float32)
-    with torch.no_grad():
-        decoded = pipe.vae.decode(
-            latents.to(torch.float32) / pipe.vae.config.scaling_factor
-        ).sample
-    pixels = (decoded / 2 + 0.5).clamp(0, 1)
-    image_np = (pixels[0].permute(1, 2, 0).cpu().numpy() * 255).round().astype("uint8")
-    return Image.fromarray(image_np)
+def _request(path, payload=None, timeout=60):
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers = {"Content-Type": "application/json"} if data else {}
+    req = urllib.request.Request(f"{COMFYUI_URL}{path}", data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return json.loads(res.read())
+    except urllib.error.HTTPError as e:
+        # ComfyUI はノード検証エラーの詳細をレスポンスボディに入れて返す
+        raise RuntimeError(f"ComfyUI {path} -> HTTP {e.code}: {e.read().decode(errors='replace')[:2000]}") from None
+
+
+def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=GEN_HEIGHT,
+              seed=None, steps=STEPS, cfg=CFG, timeout=600):
+    """ComfyUI サーバーに HTTP 経由で生成を依頼し、PIL Image を返す"""
+    if seed is None:
+        seed = random.randint(0, 2 ** 63 - 1)
+
+    workflow = _build_workflow(prompt, negative_prompt, width, height, seed, steps, cfg)
+    prompt_id = _request("/prompt", {"prompt": workflow})["prompt_id"]
+
+    deadline = time.time() + timeout
+    images = []
+    while not images:
+        entry = _request(f"/history/{prompt_id}").get(prompt_id)
+        if entry:
+            status = entry.get("status", {})
+            if status.get("status_str") == "error":
+                raise RuntimeError(f"ComfyUI generation failed: {json.dumps(status, ensure_ascii=False)[:2000]}")
+            images = [img for out in entry.get("outputs", {}).values()
+                      for img in out.get("images", [])]
+        if not images:
+            if time.time() > deadline:
+                raise TimeoutError(f"ComfyUI did not return an image within {timeout}s")
+            time.sleep(1)
+
+    query = urllib.parse.urlencode({
+        "filename": images[0]["filename"],
+        "subfolder": images[0].get("subfolder", ""),
+        "type": images[0].get("type", "output"),
+    })
+    with urllib.request.urlopen(f"{COMFYUI_URL}/view?{query}", timeout=120) as res:
+        image = Image.open(io.BytesIO(res.read()))
+        image.load()
+
+    if image.size != (OUT_WIDTH, OUT_HEIGHT):
+        image = image.resize((OUT_WIDTH, OUT_HEIGHT), Image.LANCZOS)
+    return image.convert("RGB")
 
 
 def getTextWidth(text, font):
