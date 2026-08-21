@@ -19,6 +19,13 @@ services:
       - ./models:/models
     ports:
       - "8080:8080"
+    # /health は起動直後 503、モデルのロードが終わると 200 を返す
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 90s
     deploy:
       resources:
         reservations:
@@ -35,6 +42,12 @@ services:
       - "8188:8188"
     volumes:
       - ./models/comfyui:/comfyui/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8188/system_stats', timeout=5)"]
+      interval: 5s
+      timeout: 8s
+      retries: 20
+      start_period: 60s
     deploy:
       resources:
         reservations:
@@ -52,6 +65,11 @@ services:
     environment:
       - LLAMA_SERVER_URL=${LLAMA_SERVER_URL:-http://llama-server:8080/v1}
       - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
+    # 素の depends_on はコンテナの起動しか待たない。llama-server は 12GB の
+    # モデルロードに ~36s、comfyui は ~14s かかるので、その間にノートブックを
+    # 実行すると connection error になる。healthy になるまで待たせる。
     depends_on:
-      - llama-server
-      - comfyui
+      llama-server:
+        condition: service_healthy
+      comfyui:
+        condition: service_healthy

@@ -1,7 +1,7 @@
 FROM nvidia/cuda:12.6.3-devel-ubuntu22.04
 
 RUN apt update && apt install -y \
-    git cmake build-essential libcurl4-openssl-dev \
+    git cmake build-essential libcurl4-openssl-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /llama.cpp
