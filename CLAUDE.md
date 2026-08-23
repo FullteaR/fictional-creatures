@@ -34,7 +34,7 @@ Image model weights are **not** downloaded automatically — see *Image models* 
 
 `llama-server` needs ~36s to load its 12GB GGUF and `comfyui` ~14s to import; both carry a healthcheck and `app` waits on `condition: service_healthy`, so Jupyter only becomes reachable once both back ends answer. Without that gate a plain `depends_on` returns as soon as the containers *start*, and running the notebook right away fails with a connection error. `llama-server`'s check hits `/health`, which llama.cpp answers 503 on until the model is resident.
 
-Nothing sets a `restart:` policy, so after a host reboot the stack needs `docker compose up` again.
+Both back ends — `llama-server` and `comfyui` — set `restart: unless-stopped`, so they come back on their own if they die, and because `unless-stopped` also survives a daemon restart they return by themselves after a host reboot. `app` does not, so a reboot still needs `docker compose up` to get JupyterLab back.
 
 ## Architecture
 

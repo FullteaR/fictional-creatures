@@ -12,6 +12,9 @@ services:
       context: .
       dockerfile: Dockerfile.llama-server
     container_name: llama-server
+    # 落ちたら復帰させる。llama-server が死ぬとノートブックの以降のセルが
+    # 全部 connection error になり、手で up し直すまで直らないため。
+    restart: unless-stopped
     depends_on:
       model-downloader:
         condition: service_completed_successfully
@@ -38,6 +41,8 @@ services:
       context: .
       dockerfile: Dockerfile.comfyui
     container_name: comfyui
+    # llama-server と同様、落ちたらノートブックが画像生成で止まるので復帰させる。
+    restart: unless-stopped
     ports:
       - "8188:8188"
     volumes:
