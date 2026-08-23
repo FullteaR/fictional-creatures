@@ -33,6 +33,13 @@ NEGATIVE_PROMPT = (
     "oversaturated, high contrast, dramatic lighting, cinematic, vignette, "
     "airbrushed, plastic sheen, glossy, wet look, 3d render, photorealistic, "
     "hyperdetailed, busy background, "
+    # 脚の本数はプロンプト側で数詞を指定しても崩れるので、多肢・欠損・重複を明示的に潰す。
+    # 一枚に複数個体が写ると本数が数えられなくなるため、複数個体もここで落とす
+    "extra limbs, extra legs, extra arms, extra tentacles, extra wings, extra fins, "
+    "missing limbs, missing legs, fused limbs, malformed limbs, mutated limbs, "
+    "deformed, disfigured, bad anatomy, cloned body parts, duplicated limbs, "
+    "floating limbs, disconnected limbs, extra digits, extra heads, "
+    "multiple creatures, duplicate specimen, cropped limbs, "
     # 図版スタイルは「解説文が刷り込まれたページ」を呼び込むので、文字類を明示的に潰す
     "text, letters, words, caption, label, title, typography, handwriting, "
     "watermark, signature, logo, page number, printed page, book page"
@@ -89,10 +96,13 @@ def _request(path, payload=None, timeout=60):
 
 
 def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=GEN_HEIGHT,
-              seed=None, steps=STEPS, cfg=CFG, timeout=600):
+              seed=None, steps=STEPS, cfg=CFG, timeout=600, extra_negative=""):
     """ComfyUI サーバーに HTTP 経由で生成を依頼し、PIL Image を返す"""
     if seed is None:
         seed = random.randint(0, 2 ** 63 - 1)
+    # 構図ごとの追加ネガティブ (textGenerateUtils.COMPOSITIONS) をここで足す
+    if extra_negative.strip():
+        negative_prompt = f"{negative_prompt}, {extra_negative.strip()}"
 
     workflow = _build_workflow(f"{STYLE_PREFIX}, {prompt}", negative_prompt, width, height, seed, steps, cfg)
     prompt_id = _request("/prompt", {"prompt": workflow})["prompt_id"]
