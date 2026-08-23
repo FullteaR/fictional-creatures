@@ -2,6 +2,7 @@ import io
 import json
 import os
 import random
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -144,6 +145,53 @@ def getTextHeight(text, font):
     return font.getbbox(text)[3] - font.getbbox(text)[1]
 
 
+# 学名は斜体で組む。ipagp にイタリック体が無いので、欧文だけ Noto Serif Italic に渡す
+# (src/NotoSerif-Italic.ttf, OFL-1.1)。和文の「(学名: )」は ipagp のまま立体で組む。
+ITALIC_FONT = os.environ.get("ITALIC_FONT", "NotoSerif-Italic.ttf")
+
+# Noto Serif は Latin / Greek / Cyrillic しか持たないので、LLM が学名に和字を返すと
+# 豆腐になる。その場合だけ ipagp を斜めに歪めた擬似斜体へ落とす
+_LATIN_RE = re.compile(r"^[\x20-\x7e\u00a0-\u024f\u1e00-\u1eff]+$")
+ITALIC_SHEAR = 0.22
+
+
+def italicFontFor(text, italic_font):
+    """学名を渡してよいイタリック体を返す。渡せなければ None (擬似斜体に落とす)"""
+    if italic_font is not None and _LATIN_RE.match(text or ""):
+        return italic_font
+    return None
+
+
+def getItalicWidth(text, upright_font, italic_font):
+    font = italicFontFor(text, italic_font)
+    if font is not None:
+        return getTextWidth(text, font)
+    # 歪めた分だけ右上に張り出すので、その幅も見込む
+    return getTextWidth(text, upright_font) + int(upright_font.getbbox(text)[3] * ITALIC_SHEAR) + 1
+
+
+def drawItalicText(layer, xy, text, upright_font, italic_font, fill):
+    """学名を斜体で描画し、次の文字を置く x 座標を返す。ベースラインは xy[1] 指定"""
+    font = italicFontFor(text, italic_font)
+    if font is not None:
+        ImageDraw.Draw(layer).text(xy, text, font=font, fill=fill, anchor="ls")
+        return xy[0] + getTextWidth(text, font)
+
+    box = upright_font.getbbox(text)
+    if box[2] <= 0 or box[3] <= 0:
+        return xy[0]
+    slant = int(box[3] * ITALIC_SHEAR) + 1
+    patch = Image.new("RGBA", (box[2] + slant, box[3]), (255, 255, 255, 0))
+    ImageDraw.Draw(patch).text((0, 0), text, font=upright_font, fill=fill)
+    # 出力(x, y) から 入力(x + shear*(y - 下端), y) を引く。下端を固定して上端が右へ倒れる
+    patch = patch.transform(patch.size, Image.AFFINE,
+                            (1, ITALIC_SHEAR, -ITALIC_SHEAR * box[3], 0, 1, 0),
+                            resample=Image.BICUBIC)
+    layer.alpha_composite(patch, (int(xy[0]), int(xy[1] - upright_font.getmetrics()[0])))
+    # 右への張り出しは上端だけなので、送り幅は傾き分の半分で詰める
+    return xy[0] + box[2] + slant // 2
+
+
 def getLineBreak(text, font, max_width):
     jp_tokenizer = Tokenizer()
     tokens = list(jp_tokenizer.tokenize(text))
@@ -176,8 +224,9 @@ def getLineBreak(text, font, max_width):
     return lines
 
 
-def add_caption(name, description, scientific_name, image, title_font, paragraph_font, scientific_font):
-    scientific_name = f" (学名: {scientific_name})"
+def add_caption(name, description, scientific_name, image, title_font, paragraph_font, scientific_font,
+                italic_font=None):
+    scientific_prefix, scientific_suffix = " (学名: ", ")"
     description = description.replace("\n", "")
 
     max_width = 420
@@ -185,9 +234,12 @@ def add_caption(name, description, scientific_name, image, title_font, paragraph
 
     title_height = getTextHeight(name, title_font) + 7
     line_height = getTextHeight("あ", paragraph_font) + 7
-    scientific_height = getTextHeight(scientific_name, scientific_font) + 7
+    scientific_height = getTextHeight(f"{scientific_prefix}{scientific_suffix}", scientific_font) + 7
+    scientific_width = (getTextWidth(scientific_prefix, scientific_font)
+                        + getItalicWidth(scientific_name, scientific_font, italic_font)
+                        + getTextWidth(scientific_suffix, scientific_font))
     total_height = line_height * len(lines) + title_height
-    max_line_width = max([getTextWidth(l, paragraph_font) for l in lines] + [getTextWidth(name, title_font)+getTextWidth(scientific_name, scientific_font)])
+    max_line_width = max([getTextWidth(l, paragraph_font) for l in lines] + [getTextWidth(name, title_font)+scientific_width])
 
     im_w, im_h = image.size
     padding = 10
@@ -213,7 +265,14 @@ def add_caption(name, description, scientific_name, image, title_font, paragraph
     draw.rounded_rectangle(background_box, radius=10, fill=bg_color)
 
     draw.text((x,y), name, font=title_font, fill=text_color)
-    draw.text((x+getTextWidth(name, title_font), y + title_height - scientific_height), scientific_name, font=scientific_font, fill=text_color)
+    # 斜体にするのは学名そのものだけで、和文の見出しは立体のまま。
+    # 書体が変わるとフォント上端も変わるので、揃えるのは上端ではなくベースライン
+    sci_x = x + getTextWidth(name, title_font)
+    sci_y = y + title_height - scientific_height + scientific_font.getmetrics()[0]
+    draw.text((sci_x, sci_y), scientific_prefix, font=scientific_font, fill=text_color, anchor="ls")
+    sci_x += getTextWidth(scientific_prefix, scientific_font)
+    sci_x = drawItalicText(txt_layer, (sci_x, sci_y), scientific_name, scientific_font, italic_font, text_color)
+    draw.text((sci_x, sci_y), scientific_suffix, font=scientific_font, fill=text_color, anchor="ls")
     for i, line in enumerate(lines):
         draw.text((x, y + i * line_height + title_height), line, font=paragraph_font, fill=text_color)
 
