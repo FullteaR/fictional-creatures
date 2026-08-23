@@ -29,5 +29,14 @@ CMD [ \
     "--min-p", "0.0", \
     "--presence-penalty", "1.5", \
     "--ctx-size", "16384", \
+    # llama-server のプロンプトキャッシュはホスト RAM 上にあり、既定の上限が
+    # 8192MiB = 8GB。さらに --cache-idle-slots が既定で有効なため、タスクが来る
+    # たびにアイドルスロットの KV が VRAM からホスト RAM へ退避される。実測で
+    # 1 リクエストあたり 457MiB 積み上がり、このホストの RAM (3.8GiB) と swap
+    # (8GiB) を食い潰して llama-server が OOM kill される (exit 137)。そうなると
+    # restart ポリシーが無いので復帰せず、以降ノートブックは connection error に
+    # なり続ける。プロンプトはカードごとにほぼ別物でキャッシュ命中率が低いため、
+    # 0 で無効化する。RAM を増設したら 512〜1024 程度まで戻してもよい。
+    "--cache-ram", "0", \
     "--alias", "local-model" \
 ]

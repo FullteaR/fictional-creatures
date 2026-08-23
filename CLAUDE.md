@@ -79,10 +79,11 @@ Weights live under `./models/comfyui/` (gitignored) in ComfyUI's standard layout
 
 ### LLM (`llama-server`)
 
-Qwen3.8-27B is a dense multimodal model, so it handles both the text calls and the vision call — no separate VL model. Two settings are load-bearing:
+Qwen3.8-27B is a dense multimodal model, so it handles both the text calls and the vision call — no separate VL model. Three settings are load-bearing:
 
 - **`--reasoning off`**. Qwen3.8 defaults to thinking mode at `reasoning_effort=xhigh` and will burn the entire token budget reasoning about a three-sentence creature description, returning empty `content`. Our calls are all short generations, so thinking is turned off and the sampling params follow Qwen's published *non-thinking* recommendation (temp 0.7, top-p 0.8, top-k 20, presence-penalty 1.5).
 - **`--presence-penalty 1.5`**, from that same recommendation, is what stops repetition loops. Under the previous Q2_K_XL model a loop once ran to the full 32k context and got llama-server OOM-killed.
+- **`--cache-ram 0`**. llama-server's prompt cache lives in **host RAM**, and its default cap is `8192` MiB — more than this host's entire 3.8GiB of RAM. `--cache-idle-slots` is also on by default, so every incoming task evicts the idle slots' KV from VRAM into that cache. Measured at **457MiB retained per request**, growing linearly and never released: RSS pinned at the ~2.4GiB RAM ceiling, the rest spilled to swap, and around request 17 the kernel's OOM killer took llama-server out (`exit 137`, `constraint=CONSTRAINT_NONE ... global_oom`). One creature card is four LLM calls, so this OOMed after roughly four cards. That is what `restart: unless-stopped` on the service is for — before it was added, llama-server stayed dead afterwards and every later notebook cell failed with a connection error until someone ran `docker compose up` by hand. Note the healthcheck returned `{"status":"ok"}` until four seconds before the kill — the `depends_on: service_healthy` gate cannot catch this, since it is a failure under load rather than at startup. The cache is worth little here (each card's prompts are near-unique), so it is disabled outright; with more host RAM, 512–1024 would be reasonable.
 
 **The projector comes from `ggml-org`, not `unsloth`.** The file at `unsloth/Qwen3.8-27B-GGUF/mmproj-F16.gguf` is byte-identical to the Qwen3.5 projector (`projection_dim` 2048) and llama-server refuses to start with it, since Qwen3.8-27B has `n_embd` 5120. `ggml-org/Qwen3.8-27B-GGUF/mmproj-Qwen3.8-27B-Q8_0.gguf` is the correct one.
 
