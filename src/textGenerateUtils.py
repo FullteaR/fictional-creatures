@@ -75,26 +75,47 @@ def limb_count_phrases(prompt):
 
 # ---- 裏設定 ---------------------------------------------------------------
 # 図鑑の解説文（カードに載る文章）には出さないが、絵作りの材料にする設定。
-# 危険度・個体数・構図はコード側でサイコロを振る。LLM に選ばせると
-# どれも「無害・希少・生物の全体図」に寄って 25 枚が同じ絵面になるため。
 
 # 構図は STYLE_PREFIX と同じ扱いで、LLM の出力にコード側から前置きする。
 # draws_creature=False の構図では本体を描かないので、付属肢の本数指定も外す。
-# 最後の要素は構図ごとの追加ネガティブ。特に「痕跡」は、プロンプトで no creature visible と
+# counts_limbs=False は本体が写っても本数を数えられない構図（遠景）。数詞の指定は書かせない。
+# shows_group=False は群れを収められない構図。本体が写らない「痕跡」と、
+# 体の一部しか写らない「拡大図」には、群れる生物でも群れを描かせない。
+# group_only=True は群れる生物専用の構図。構図の指定自体が群れを描写しているので、
+# GROUP_DIRECTIVE は前置きしない（「手前の一体をはっきり」と遠景が矛盾する）。
+# negative は構図ごとの追加ネガティブ。特に「痕跡」は、プロンプトで no creature visible と
 # 言うだけでは本体が描かれてしまうので、ネガティブ側から生きた個体を潰す必要がある。
 COMPOSITIONS = [
-    (50, "生物の全体図", "the whole creature centred in frame, entire body visible from head to tail, "
-                        "side-on specimen view, habitat kept plain and secondary", True,
-     "cropped, out of frame, extreme close-up"),
-    (20, "生息地の風景", "wide view of the habitat filling the frame, the creature small and partly "
-                        "concealed within the scene, environment shown in full", True,
-     "extreme close-up, empty scenery"),
-    (15, "生態の痕跡", "the creature itself absent from frame, no animal visible, only {trace} "
-                      "left behind, shown in situ in the empty habitat", False,
-     "live animal, living creature, animal, eyes, face, moving limbs"),
-    (15, "体の一部の拡大図", "close-up study of {part} filling the frame, the rest of the body out of "
-                          "frame, habitat plain and out of focus behind", True,
-     "full body, whole creature, wide shot, distant view"),
+    {"weight": 50, "label": "生物の全体図",
+     "directive": "the whole creature centred in frame, entire body visible from head to tail, "
+                  "side-on specimen view, habitat kept plain and secondary",
+     "draws_creature": True, "counts_limbs": True, "shows_group": True, "group_only": False,
+     "negative": "cropped, out of frame, extreme close-up"},
+    {"weight": 20, "label": "生息地の風景",
+     "directive": "wide view of the habitat filling the frame, the creature small and partly "
+                  "concealed within the scene, environment shown in full",
+     "draws_creature": True, "counts_limbs": True, "shows_group": True, "group_only": False,
+     "negative": "extreme close-up, empty scenery"},
+    {"weight": 15, "label": "生態の痕跡",
+     "directive": "the creature itself absent from frame, no animal visible, only {trace} "
+                  "left behind, shown in situ in the empty habitat",
+     "draws_creature": False, "counts_limbs": False, "shows_group": False, "group_only": False,
+     "negative": "live animal, living creature, animal, eyes, face, moving limbs"},
+    {"weight": 15, "label": "体の一部の拡大図",
+     "directive": "close-up study of {part} filling the frame, the rest of the body out of "
+                  "frame, habitat plain and out of focus behind",
+     "draws_creature": True, "counts_limbs": True, "shows_group": False, "group_only": False,
+     "negative": "full body, whole creature, wide shot, distant view"},
+    {"weight": 50, "label": "群れの遠景",
+     "directive": "distant wide view of a dense swarm of the species massed across the habitat, "
+                  "many small individuals scattered and clustered far from the viewer, each one "
+                  "tiny and without visible detail, the habitat visible around and beyond them",
+     "draws_creature": True, "counts_limbs": False, "shows_group": True, "group_only": True,
+     # 遠景は人物を呼び込む。silhouette という語もそうだが、説明文が交易や集落に触れると
+     # 地平線に人型が並ぶので、この構図だけ人間をネガティブで落とす
+     "negative": "close-up, macro, single specimen, large creature in foreground, portrait, "
+                 "human, people, person, crowd, humanoid figure, standing figures, "
+                 "buildings, vehicles"},
 ]
 TRACES = [
     "the picked-over remains of its prey with feeding marks",
@@ -115,34 +136,36 @@ DANGERS = [
     (25, "毒を持ち、接触すると危険"),
     (15, "致死的で、接近そのものが極めて危険"),
 ]
-# 個体数は絵に直接出しにくいが、行動や生息環境の描写を通して間接的に効く。
-# 「大量発生」でも図版に描くのは一体だけ。複数個体は NEGATIVE_PROMPT 側で落としており、
-# 画面内に何匹も入ると脚の本数が読めなくなる。
+# 個体数のうち「大量発生」だけは図版にも群れとして出す (group=True)。
+# 残りは行動や生息環境の描写を通して間接的に効くだけで、描くのは一体。
 POPULATIONS = [
-    (20, "大量発生しており、生息地では群れに出くわす"),
-    (30, "生息地では普通に見られる"),
-    (30, "限られた場所にのみ局所的に生息する"),
-    (20, "記録が数例しかない希少種"),
+    (20, "大量発生しており、生息地では群れに出くわす", True),
+    (30, "生息地では普通に見られる", False),
+    (30, "限られた場所にのみ局所的に生息する", False),
+    (20, "記録が数例しかない希少種", False),
 ]
+# 群れを同格に並べると脚の本数が数えられなくなるので、手前の一体だけをはっきり描かせ、
+# 残りは後方に小さく置かせる。数えられるのは手前の個体、という図鑑の図版の作り方に倣う。
+GROUP_DIRECTIVE = ("many individuals of the same species together in the scene, "
+                   "one specimen in the foreground shown clearly and in full, "
+                   "the others smaller and further back, all identical in form")
 
 
 def _composition(row):
-    _, label, directive, draws_creature, negative = row
-    return {
-        "label": label,
-        "directive": directive.format(trace=random.choice(TRACES), part=random.choice(PARTS)),
-        "draws_creature": draws_creature,
-        "negative": negative,
-    }
+    picked = dict(row)
+    picked["directive"] = row["directive"].format(
+        trace=random.choice(TRACES), part=random.choice(PARTS))
+    return picked
 
 
 def pick_traits():
-    """コード側でサイコロを振る裏設定。図鑑の説明文には出さない"""
+    population = random.choices(POPULATIONS, weights=[p[0] for p in POPULATIONS])[0]
+    # 群れ専用の構図は、群れる個体を引いたときだけ候補に入れる
+    pool = [row for row in COMPOSITIONS if population[2] or not row["group_only"]]
     return {
         "danger": random.choices([d[1] for d in DANGERS], weights=[d[0] for d in DANGERS])[0],
-        "population": random.choices([p[1] for p in POPULATIONS], weights=[p[0] for p in POPULATIONS])[0],
-        "composition": _composition(random.choices(
-            COMPOSITIONS, weights=[row[0] for row in COMPOSITIONS])[0]),
+        "population": {"label": population[1], "group": population[2]},
+        "composition": _composition(random.choices(pool, weights=[row["weight"] for row in pool])[0]),
     }
 
 
@@ -152,13 +175,37 @@ def _composition_of(traits):
     return _composition(COMPOSITIONS[0])
 
 
-def _with_composition(prompt, composition):
-    """構図指定はコード側で前置きする（LLM に任せると毎回「全体図」に戻る）"""
+def _population_of(traits):
+    if traits and traits.get("population"):
+        return traits["population"]
+    return {"label": POPULATIONS[1][1], "group": POPULATIONS[1][2]}
+
+
+def draws_group(traits):
+    """群れとして描く個体か。収まらない構図では群れる生物でも一体だけ描く"""
+    return _population_of(traits)["group"] and _composition_of(traits)["shows_group"]
+
+
+def _echoed(head, body):
+    """指定の頭を LLM が出力に取り込んでいるか。冠詞を落として比べないと、
+    "the whole creature centred in frame" を "whole creature centred in frame" と
+    書き写されただけで取りこぼし、同じ指定が二重に前置きされる"""
+    key = " ".join(head.split(",")[0].split()).lower()
+    if key.startswith("the "):
+        key = key[4:]
+    return key in " ".join(body.split()).lower()
+
+
+def _with_directives(prompt, composition, group):
+    """構図と群れの指定はコード側で前置きする（LLM に任せると毎回「一体の全体図」に戻る）"""
     body = prompt.strip()
-    head = composition["directive"]
-    if head.split(",")[0].strip().lower() in body.lower():
-        return body
-    return f"{head}, {body}"
+    heads = [composition["directive"]]
+    if group and not composition["group_only"]:
+        heads.append(GROUP_DIRECTIVE)
+    for head in reversed(heads):
+        if not _echoed(head, body):
+            body = f"{head}, {body}"
+    return body
 
 
 def generate_profile(target, description, traits):
@@ -183,7 +230,7 @@ def generate_profile(target, description, traits):
                 "行動と姿勢 / 生息環境の細部 の10項目を、この順番で1行ずつ、markdown等は使わずに書いてください。\n\n"
                 "付属肢の行には、脚・腕・触手・翼・ひれ・触角の本数を必ず算用数字で書き、片側何本かも添えてください。"
                 "「多数」「無数」のような曖昧な書き方はせず、無い付属肢は書かないでください。\n\n"
-                f"人間への危険度は「{traits['danger']}」、個体数は「{traits['population']}」として、"
+                f"人間への危険度は「{traits['danger']}」、個体数は「{traits['population']['label']}」として、"
                 "それに合う姿・行動にしてください。"
                 "上の説明文と矛盾しない範囲で、説明文には書かれていない見た目の細部を補ってください。"
                 "項目のみを答え、前置きや解説はしないでください。"
@@ -247,16 +294,27 @@ def generate_scientific_name(target, description):
 
 def generate_prompt(target, description, profile="", traits=None):
     composition = _composition_of(traits)
+    group = draws_group(traits)
+    # 群れ専用の構図は指定そのものが群れの絵なので、「手前の一体」の話は要らない
+    foreground_group = group and not composition["group_only"]
     sample_prompt = """
     intricate cave system, vast underground cavern, damp misty air, rugged cave walls, uneven rocky surfaces, small flying insects, pale fungi, scattered moss patches, hanging roots, water droplets on stalactites, cold humid air, ancient untouched cave, a tiny creature clinging to the wall, large round eyes, six thin twitching legs, three legs on each side, two short antennae, no other limbs, one specimen shown clearly, whole body visible, poised to strike at a passing insect, delicate organism against rough stone, plain background, specimen study
     """
-    if composition["draws_creature"]:
+    if composition["draws_creature"] and composition["counts_limbs"]:
         limb_note = (
             "脚・触手・腕・翼・ひれ・触角といった付属肢は、裏設定に書かれた本数どおりに、"
             "必ず英語の数詞で書いてください（例: six thin twitching legs, three legs on each side）。"
             "many legs, numerous limbs, multiple tentacles のような数の曖昧な表現は使わず、"
             "同じ部位の本数を別の箇所で違う数で書かないでください。"
-            "裏設定に無い種類の付属肢は生やさないよう no other limbs と添え、描くのは一体だけにしてください。"
+            "裏設定に無い種類の付属肢は生やさないよう no other limbs と添えてください。"
+            + ("画面には同じ種の個体が多数写りますが、本数を数えられるのは手前の一体だけで構いません。"
+               if foreground_group else "描くのは一体だけにしてください。")
+        )
+    elif composition["draws_creature"]:
+        limb_note = (
+            "この構図では個体は遠くに小さくしか写りません。付属肢の本数や体の細部は書かず、"
+            "遠くから見た体のかたちと色、群れ全体の広がり・密度・分布のかたち、"
+            "そして周囲の生息環境を描写してください。"
         )
     else:
         limb_note = (
@@ -267,6 +325,11 @@ def generate_prompt(target, description, profile="", traits=None):
     profile_block = (
         f"さらに、図鑑には載せていない裏設定が以下のとおりです。プロンプトの細部はここから取ってください。"
         f"\n\n{profile}\n\n" if profile.strip() else ""
+    )
+    group_note = (
+        f"この生物は群れをつくり、画面には同じ姿の個体が多数写ります。英語では次のように指定されています: "
+        f"{GROUP_DIRECTIVE}。群れの密度や、集まっているときの行動が伝わる描写を入れてください。"
+        f"ただし手前の一体は全身がはっきり見えるように書いてください。\n\n" if foreground_group else ""
     )
     messages = [
         {
@@ -279,6 +342,7 @@ def generate_prompt(target, description, profile="", traits=None):
                 f"\n\n{description}\n\n{profile_block}"
                 f"この絵の構図は「{composition['label']}」で、英語では次のように指定されています: "
                 f"{composition['directive']}。この構図に合う内容だけを書いてください。\n\n"
+                f"{group_note}"
                 f"{limb_note}\n\n"
                 "プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます。\n\n"
                 "画風・画質・照明の指定は別途こちらで付与するので、あなたは生物の形態と生息環境の描写だけを書いてください。"
@@ -287,27 +351,39 @@ def generate_prompt(target, description, profile="", traits=None):
             ),
         }
     ]
-    return _with_composition(call_llm(messages), composition)
+    return _with_directives(call_llm(messages), composition, group)
 
 
 def refine_prompt_with_image(prompt, image, target, description, profile="", traits=None):
     """生成画像を踏まえてプロンプトを改善する。"""
     composition = _composition_of(traits)
+    group = draws_group(traits)
+    foreground_group = group and not composition["group_only"]
     # 下書きの本数をそのまま次のパスに持ち越す。画像側は脚の数を間違えているのが
     # 常態なので、「画像に合わせる」のではなく下書きの数詞を正としてもう一度書かせる。
-    counts = limb_count_phrases(prompt) if composition["draws_creature"] else []
+    counts = limb_count_phrases(prompt) if composition["counts_limbs"] else []
     if counts:
         limb_note = (
             "元のプロンプトでは付属肢の本数を「" + "」「".join(counts) + "」と指定しています。"
             "画像に写っている本数がこれと違っていても、正しいのは元のプロンプトの方です。"
             "書き直したプロンプトにも同じ数詞をそのまま書いてください。"
             "many legs, numerous limbs のような数の曖昧な表現は使わず、"
-            "裏設定に無い種類の付属肢が生えないよう no other limbs と添え、描くのは一体だけにしてください。"
+            "裏設定に無い種類の付属肢が生えないよう no other limbs と添えてください。"
+            + ("画面には同じ種の個体が多数写りますが、本数を数えられるのは手前の一体だけで構いません。"
+               if foreground_group else "描くのは一体だけにしてください。")
+        )
+    elif composition["counts_limbs"]:
+        limb_note = (
+            "書き直したプロンプトでは、脚・触手・腕・翼・ひれ・触角の本数を裏設定どおりに英語の数詞で書いてください"
+            "（例: six thin legs, three legs on each side）。"
+            + ("手前の一体は全身がはっきり見えるように書いてください。"
+               if foreground_group else "描くのは一体だけにしてください。")
         )
     elif composition["draws_creature"]:
         limb_note = (
-            "書き直したプロンプトでは、脚・触手・腕・翼・ひれ・触角の本数を裏設定どおりに英語の数詞で書いてください"
-            "（例: six thin legs, three legs on each side）。描くのは一体だけにしてください。"
+            "この構図では個体は遠くに小さくしか写りません。付属肢の本数や体の細部は書かず、"
+            "遠くから見た体のかたちと色、群れ全体の広がり・密度・分布のかたち、"
+            "そして周囲の生息環境を描写してください。"
         )
     else:
         limb_note = (
@@ -315,6 +391,10 @@ def refine_prompt_with_image(prompt, image, target, description, profile="", tra
             "no creature visible と添えてください。"
         )
     profile_block = f"図鑑には載せていない裏設定: {profile}\n\n" if profile.strip() else ""
+    group_note = (
+        f"この生物は群れをつくり、画面には同じ姿の個体が多数写ります: {GROUP_DIRECTIVE}\n\n"
+        if foreground_group else ""
+    )
 
     buf = BytesIO()
     image.save(buf, format="PNG")
@@ -336,6 +416,7 @@ def refine_prompt_with_image(prompt, image, target, description, profile="", tra
                         f"{profile_block}"
                         f"この絵の構図は「{composition['label']}」で、英語では次のように指定されています: "
                         f"{composition['directive']}\n\n"
+                        f"{group_note}"
                         "この画像と生物の説明・裏設定を見比べ、食い違っている点を洗い出したうえで、"
                         "説明と裏設定をより正確に反映するようプロンプトを書き直してください。"
                         "書き直したプロンプトのみを英語で答えてください。解説は不要です。あなたの出力はそのままStable Diffusionに渡されます。\n\n"
@@ -348,7 +429,7 @@ def refine_prompt_with_image(prompt, image, target, description, profile="", tra
             ],
         }
     ]
-    return _with_composition(call_llm(messages), composition)
+    return _with_directives(call_llm(messages), composition, group)
 
 
 def generate_description(target):
