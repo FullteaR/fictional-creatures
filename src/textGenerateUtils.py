@@ -116,7 +116,7 @@ BODY_PLANS = [
      "limbs": "none", "head": True, "limb_cap": 0, "limb_heavy": False, "colonial": False,
      "negative": ""},
     {"weight": 7, "label": "植物体型", "kind": "植物",
-     "ja": "根と茎と葉に分かれ、地面に根を張る植物のような体",
+     "ja": "茎と葉を広げ、地面に根を張って立つ体",
      "en": "rooted plant body, roots and stem and leaves, standing anchored in the ground",
      "limbs": "none", "head": False, "limb_cap": 0, "limb_heavy": False, "colonial": False,
      "negative": "walking, animal face, paws, claws"},
@@ -316,6 +316,10 @@ _OPENING = ("一文目はその生物が何であるかを名詞で短く言い�
 _BURIRIA = "古代の湖にて観測される甲殻類「ブリリア」"
 _MIZU = "深海にて観測される架空の生物「ミズモドキ」"
 _ZATON = "アンカラ洞窟にて観測される架空の生物「ザトン」"
+_PLAN_LABELS = {row["label"]: row for row in BODY_PLANS}
+_SAMPLE_PLANS = {_BURIRIA: "殻を持つ型", _MIZU: "袋状・球状型", _ZATON: "節足型"}
+_unknown_labels = set(_SAMPLE_PLANS.values()) - set(_PLAN_LABELS)
+assert not _unknown_labels, f"_SAMPLE_PLANS に BODY_PLANS に無い label があります: {_unknown_labels}"
 REGISTERS = [
     {"weight": 50, "label": "図鑑の記述",
      "instruction": "観察された事実だけを淡々と、図鑑の解説文の調子で書いてください。",
@@ -328,6 +332,9 @@ REGISTERS = [
      "instruction": "記載や発見の経緯、計測値、まだ分かっていない点を交えて書いてください。",
      "samples": ((_ZATON, KyomutonKiroku), (_MIZU, MizumodokiKiroku))},
 ]
+_unkeyed_samples = ({phrase for row in REGISTERS for phrase, _ in row["samples"]}
+                    - set(_SAMPLE_PLANS))
+assert not _unkeyed_samples, f"_SAMPLE_PLANS に体型の無い例文があります: {_unkeyed_samples}"
 
 
 def _parts(plan):
@@ -916,18 +923,22 @@ def apply_proof(description, review):
     return description
 
 
+def _description_request(target, ja, register, opener=""):
+    return (f"{opener}{target}について3から5文程度で教えて下さい。{_OPENING}"
+            f"この生物の姿は{ja}です。"
+            f"その体で何をして暮らしているかが伝わるように書いてください。{register['instruction']}"
+            "markdown等は使用せず文章のみで回答してください")
+
+
 def generate_description(target, traits=None):
     plan = _body_plan_of(traits)
     register = _register_of(traits)
     messages = []
     for phrase, text in register["samples"]:
-        messages.append({"role": "user", "content": (
-            f"{phrase}について3から5文程度で教えて下さい。{_OPENING}{register['instruction']}"
-            "markdown等は使用せず文章のみで回答してください")})
+        sample_plan = _PLAN_LABELS[_SAMPLE_PLANS[phrase]]
+        messages.append({"role": "user",
+                         "content": _description_request(phrase, sample_plan["ja"], register)})
         messages.append({"role": "assistant", "content": text})
-    messages.append({"role": "user", "content": (
-        f"いいですね。次は{target}について3から5文程度で教えて下さい。{_OPENING}"
-        f"この生物の姿は{plan['ja']}です。"
-        f"その体で何をして暮らしているかが伝わるように書いてください。{register['instruction']}"
-        "markdown等は使用せず文章のみで回答してください")})
+    messages.append({"role": "user",
+                     "content": _description_request(target, plan["ja"], register, "いいですね。次は")})
     return call_llm(messages)
