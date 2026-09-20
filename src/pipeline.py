@@ -13,12 +13,14 @@ from PIL.PngImagePlugin import PngInfo
 
 from MonsterNameGenerator import MarkovMonsterNameGenerator
 from imageGenerateUtils import add_caption, get_image
-from textGenerateUtils import (draws_solo, extra_negative, generate_description,
-                               generate_profile, generate_prompt, generate_scientific_name,
-                               pick_traits, refine_prompt_with_image, token_sink)
+from textGenerateUtils import (apply_proof, apply_review, draws_solo, extra_negative,
+                               generate_description, generate_profile, generate_prompt,
+                               generate_scientific_name, pick_traits, review_description,
+                               review_image, review_payload, token_sink)
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.environ.get("ENDEMIC_OUT_DIR", os.path.join(SRC_DIR, "endemic"))
+REVIEW_RETRIES = int(os.environ.get("ENDEMIC_REVIEW_RETRIES", "1"))
 
 FIELDS = [
     "杉林", "古代林", "畑", "草むら", "花畑", "密林", "水没林", "ジャングル", "峠", "山の麓",
@@ -59,8 +61,9 @@ STEPS = [
     ("profile", "裏設定"),
     ("prompt", "作画指示"),
     ("draft", "下書き"),
-    ("refine", "指示の練り直し"),
+    ("review", "照合"),
     ("final", "清書"),
+    ("proof", "校正"),
     ("caption", "組版"),
 ]
 
@@ -105,6 +108,15 @@ def build_target(field=None, species=None, name=None):
     if not given and species in SUFFIXABLE_SPECIES and random.randint(0, 1) == 1:
         name = name + species
     return name, field, species, "{0}にて観測される架空の{1}「{2}」".format(field, species, name)
+
+
+def _merge_negative(notes, found):
+    parts = (part.strip() for part in ", ".join((notes, found)).split(","))
+    return ", ".join(dict.fromkeys(part for part in parts if part))
+
+
+def _unmatched(entry):
+    return sum(1 for item in entry["review"] if not item["ok"])
 
 
 def traits_payload(traits):
@@ -172,12 +184,35 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
     negative = extra_negative(traits)
     solo = draws_solo(traits)
 
-    draft = run("draft", lambda: get_image(prompt, extra_negative=negative, solo=solo))
-    refined = run("refine", lambda: refine_prompt_with_image(
-        prompt, draft, target, description, profile, traits)).strip()
+    seed = random.getrandbits(63)
+    current, notes, plates, rounds = prompt, "", [], []
+    while True:
+        plate_negative = ", ".join(part for part in (negative, notes) if part)
+        plates.append(run("draft" if not rounds else "final", lambda: get_image(
+            current, extra_negative=plate_negative, solo=solo, seed=seed)))
+        review = run("review", lambda: review_image(
+            plates[-1], current, target, description, profile, traits))
+        rounds.append({"prompt": current, "negative": notes, "review": review_payload(review)})
+        if all(entry["ok"] for entry in review) or len(rounds) > REVIEW_RETRIES:
+            break
+        if len(rounds) > 1 and _unmatched(rounds[-1]) >= _unmatched(rounds[-2]):
+            break
+        fixed, found = apply_review(current, review)
+        merged = _merge_negative(notes, found)
+        if fixed == current and merged == notes:
+            break
+        current, notes = fixed, merged
+
+    chosen = min(range(len(rounds)), key=lambda index: _unmatched(rounds[index]))
+    background = plates[chosen]
+    refined = rounds[chosen]["prompt"]
     field_done("refined_prompt", refined)
 
-    background = run("final", lambda: get_image(refined, extra_negative=negative, solo=solo))
+    proof = run("proof", lambda: review_description(
+        background, description, target, species, field, traits))
+    draft_description, description = description, apply_proof(description, proof)
+    if description != draft_description:
+        field_done("description", description)
 
     final_image = run("caption", lambda: add_caption(
         name, description, scientific_name, background,
@@ -191,6 +226,7 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
         "name": name,
         "scientific_name": scientific_name,
         "description": description,
+        "draft_description": draft_description,
         "field": field,
         "species": species,
         "target": target,
@@ -198,6 +234,9 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
         "profile": profile,
         "prompt": prompt,
         "refined_prompt": refined,
+        "rounds": rounds,
+        "chosen_round": chosen,
+        "seed": seed,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "seconds": round(time.time() - started, 1),
     }
