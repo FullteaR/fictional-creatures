@@ -1,5 +1,3 @@
-/* ボタン1つ。押したら /api/generate を叩き、あとは status を見に行くだけ */
-
 const go = document.getElementById("go");
 const note = document.getElementById("note");
 const plate = document.getElementById("plate");
@@ -42,7 +40,7 @@ function show(state) {
       img.src = url;
       plate.hidden = false;
       plate.classList.remove("is-new");
-      void plate.offsetWidth;          // アニメーションを付け直すためリフローを挟む
+      void plate.offsetWidth;
       plate.classList.add("is-new");
     }
   }
@@ -69,6 +67,5 @@ go.addEventListener("click", async () => {
   poll();
 });
 
-/* ページを開き直しても、走っていれば続きが見える */
 poll();
 setInterval(poll, 2000);

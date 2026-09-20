@@ -4,7 +4,7 @@ import random
 class MarkovMonsterNameGenerator:
     
     def __init__(self, n=2):
-        self.n = n  # Nグラムのサイズ
+        self.n = n
         self.transitions = {}
         self.bos = "^"
         self.eos = "$"
@@ -15,7 +15,6 @@ class MarkovMonsterNameGenerator:
     def train(self, names):
         self.originals += names
         for name in names:
-            # 文頭・文末マークを追加
             name = self.bos * (self.n) + name + self.eos
             for i in range(len(name) - self.n):
                 gram = name[i:i+self.n]
@@ -32,6 +31,8 @@ class MarkovMonsterNameGenerator:
                 return False
             if len(original)>3 and original in name:
                 return False
+            if abs(len(name) - len(original)) > 2:
+                continue
             distance = Levenshtein.distance(name, original)
             if distance <= 2 and len(name)>5:
                 return False

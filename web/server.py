@@ -1,12 +1,4 @@
-"""架空固有種 観察記録 — ボタンを押すとカードを1枚作る。
-
-生成そのものは src/pipeline.py。ここがやるのは「同時に1件しか走らせない」ことと
-「出来上がった1枚を返す」ことだけ。llama-server と comfyui で GPU の 22.2GB が
-埋まっているので、2件目は並べても載らない。
-
-生成中のトークンは stdout に出る (pipeline に emit を渡していないため)。
-追いたいときは docker compose logs -f webui。
-"""
+"""架空固有種 観察記録 — 生成は src/pipeline.py、同時に1件だけ走らせる。"""
 
 import asyncio
 import os
@@ -24,7 +16,6 @@ import pipeline
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 _IMAGE_NAME = re.compile(r"^[^/\\]+\.png$")
 
-# 画面はこれを 2 秒おきに見に来るだけ
 _state = {"running": False, "image": None, "error": None}
 
 app = FastAPI(title="架空固有種 観察記録")
@@ -34,7 +25,7 @@ async def _generate():
     try:
         card, _ = await asyncio.to_thread(pipeline.generate_card)
         _state["image"] = card["image"]
-    except Exception as error:  # 次のボタンで作り直せるよう、理由だけ残して畳む
+    except Exception as error:
         _state["error"] = f"{type(error).__name__}: {error}"
         print(f"[generate] failed: {_state['error']}", flush=True)
     finally:

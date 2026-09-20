@@ -1,13 +1,4 @@
-"""カード1枚を作る手順。ノートブックと Web UI の共通の入口。
-
-産地・種別の表、フォント、名前生成器、カードを1枚作る手順をここに置く。
-ノートブック (monster-generator.ipynb) と web/server.py はどちらもここを呼ぶので、
-生成の中身を変えるときに直す場所はこのファイルだけでよい。
-
-違いは途中経過の受け取り方だけ:
-  emit なし          call_llm が今までどおり stdout にトークンを流す (Web UI 側)
-  emit=console_emit  工程名つきで stdout に流す (ノートブック側)
-"""
+"""カード1枚を作る手順。ノートブックと Web UI の共通の入口。"""
 
 import json
 import os
@@ -22,9 +13,9 @@ from PIL.PngImagePlugin import PngInfo
 
 from MonsterNameGenerator import MarkovMonsterNameGenerator
 from imageGenerateUtils import add_caption, get_image
-from textGenerateUtils import (draws_group, generate_description, generate_profile,
-                               generate_prompt, generate_scientific_name, pick_traits,
-                               refine_prompt_with_image, token_sink)
+from textGenerateUtils import (draws_solo, extra_negative, generate_description,
+                               generate_profile, generate_prompt, generate_scientific_name,
+                               pick_traits, refine_prompt_with_image, token_sink)
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.environ.get("ENDEMIC_OUT_DIR", os.path.join(SRC_DIR, "endemic"))
@@ -32,24 +23,35 @@ OUT_DIR = os.environ.get("ENDEMIC_OUT_DIR", os.path.join(SRC_DIR, "endemic"))
 FIELDS = [
     "杉林", "古代林", "畑", "草むら", "花畑", "密林", "水没林", "ジャングル", "峠", "山の麓",
     "樹海", "竹林", "森", "霧の森", "熱帯雨林", "サバンナ", "桜並木", "果樹園",
+    "笹薮", "ブナ林", "マングローブ林",
+    "湿原", "泥炭地", "ヨシ原", "水田", "棚田", "牧草地", "高原の草原",
     "洞窟", "鍾乳洞", "谷底", "岩石地帯", "鉱山", "荒野", "岩の中",
-    "雪原", "凍土", "氷河",
+    "高山帯", "断崖の岩棚", "尾根", "風穴", "雲海の上",
+    "火口", "溶岩洞", "地熱地帯", "断層の割れ目", "隕石孔", "間欠泉",
+    "雪原", "凍土", "氷河", "雪渓", "流氷", "氷床の下", "永久凍土の割れ目",
     "旧市街地", "化学工場跡地", "都市の下水道", "古城", "都市部", "廃工場", "地下鉄廃線", "空中都市",
-    "大砂漠", "オアシス",
+    "図書館の書庫", "倉庫の奥", "配管の中", "送電鉄塔", "廃校", "地下駐車場", "ごみ集積場",
+    "研究所跡", "墓地", "貯水槽", "温室",
+    "大砂漠", "オアシス", "塩湖", "塩の平原", "砂丘", "涸れ川",
     "海", "深海", "浅瀬", "砂浜", "汽水域", "川底", "孤島", "海底遺跡", "湖", "潮溜まり",
     "地下水路", "滝", "沈没船", "サンゴ礁",
+    "上空の雷雲", "積乱雲の中", "電離層", "季節風の通り道",
     "成層圏", "惑星中心部", "溶岩地帯",
+    "落ち葉の下", "樹皮の裏", "朽ちた切り株", "岩の割れ目", "苔むした倒木", "巨木のうろ",
+    "獣の毛の中", "キノコの傘の裏",
     "モンスターの体内",
 ]
 SPECIES = [
     "生物", "鳥", "虫", "植物", "花", "草", "木", "キノコ", "魚", "爬虫類", "哺乳類", "両生類",
     "巨大生物", "小型生物", "草食動物", "肉食動物", "寄生生物", "絶滅危惧種", "甲殻類", "貝",
     "群生生物", "原始生物", "人工生命", "分類不明の生物",
+    "軟体動物", "刺胞動物", "棘皮動物", "環形動物", "菌類", "粘菌", "藻類", "苔", "地衣類", "微生物",
+    "夜行性生物", "穴居生物", "滑空生物", "濾過摂食生物", "腐食性生物", "共生生物", "擬態生物",
+    "回遊性の生物", "変温生物",
+    "外来種", "家畜化された生物", "半水生生物", "樹上生物", "地中生物",
 ]
-# 名前の末尾に種別をくっつけて通りのいい和名にするのは、この4種だけ
-SUFFIXABLE_SPECIES = ("貝", "草", "鳥", "魚")
+SUFFIXABLE_SPECIES = ("貝", "草", "鳥", "魚", "虫", "苔")
 
-# 工程。UI の進捗表示がこの順番と ID をそのまま使う
 STEPS = [
     ("name", "名称"),
     ("description", "解説"),
@@ -72,7 +74,6 @@ _fonts = None
 
 
 def name_generator():
-    """マルコフ連鎖の学習は 4246 行の総当たりで重いので、一度だけやって使い回す"""
     global _name_generator
     if _name_generator is None:
         generator = MarkovMonsterNameGenerator(n=2)
@@ -94,7 +95,6 @@ def fonts():
 
 
 def build_target(field=None, species=None, name=None):
-    """産地・種別・名前から「〜にて観測される架空の〜「〜」」を組み立てる"""
     generator = name_generator()
     given = (name or "").strip()
     name = given or generator.generate()
@@ -102,32 +102,24 @@ def build_target(field=None, species=None, name=None):
     species = species or random.choice(SPECIES)
     if field == "モンスターの体内":
         field = generator.generate() + "の体内"
-    # 名前を指定して呼ばれたときは、指定どおりの名前で出す
     if not given and species in SUFFIXABLE_SPECIES and random.randint(0, 1) == 1:
         name = name + species
     return name, field, species, "{0}にて観測される架空の{1}「{2}」".format(field, species, name)
 
 
 def traits_payload(traits):
-    """裏設定のうち UI に見せる分。directive などの英文はカード詳細で出す"""
     return {
         "danger": traits["danger"],
         "population": traits["population"]["label"],
         "group": bool(traits["population"]["group"]),
+        "body_plan": traits["body_plan"]["label"],
+        "register": traits["register"]["label"],
         "composition": traits["composition"]["label"],
         "directive": traits["composition"]["directive"],
     }
 
 
 def _png_metadata(card):
-    """カードの情報を PNG のテキストチャンクに入れる。
-
-    PNG に EXIF はまず使われず、この界隈 (ComfyUI / A1111) の通り相場は
-    tEXt / iTXt チャンク。iTXt は UTF-8 なので和文がそのまま入る
-    (tEXt は Latin-1 なので入らない)。Title / Description / Creation Time /
-    Software は PNG 仕様の標準キーワードで、汎用のビューアでも読める。
-    Endemic だけはこちらの都合なので、まとめて JSON で持たせる。
-    """
     info = PngInfo()
     info.add_itxt("Title", card["name"])
     info.add_itxt("Description", card["description"])
@@ -138,16 +130,10 @@ def _png_metadata(card):
 
 
 def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT_DIR):
-    """カードを1枚作って保存し、(メタデータの dict, 仕上がりの画像) を返す。
-
-    emit(event)  進捗イベントを受け取る関数。省略すると call_llm が
-                 今までどおり stdout にトークンを流す
-    """
     started = time.time()
     notify = emit if emit is not None else (lambda event: None)
 
     def sink(key):
-        # emit が無いときは差し替えない。call_llm の既定どおり stdout に出る
         if emit is None:
             return nullcontext()
         return token_sink(lambda text: emit({"type": "token", "step": key, "text": text}))
@@ -169,7 +155,7 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
     notify({"type": "step", "step": "name", "status": "done"})
     field_done("name", name)
 
-    description = run("description", lambda: generate_description(target))
+    description = run("description", lambda: generate_description(target, traits))
     description = description.strip()
     field_done("description", description)
 
@@ -177,22 +163,21 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
                           lambda: generate_scientific_name(target, description)).strip()
     field_done("scientific_name", scientific_name)
 
-    # 説明文の後に作る。説明文と矛盾しない範囲で、説明文に無い見た目の細部を足す役
     profile = run("profile", lambda: generate_profile(target, description, traits)).strip()
     field_done("profile", profile)
 
     prompt = run("prompt", lambda: generate_prompt(target, description, profile, traits)).strip()
     field_done("prompt", prompt)
 
-    extra_negative = traits["composition"]["negative"]
-    solo = not draws_group(traits)  # 群れる生物は複数個体を落とさない
+    negative = extra_negative(traits)
+    solo = draws_solo(traits)
 
-    draft = run("draft", lambda: get_image(prompt, extra_negative=extra_negative, solo=solo))
+    draft = run("draft", lambda: get_image(prompt, extra_negative=negative, solo=solo))
     refined = run("refine", lambda: refine_prompt_with_image(
         prompt, draft, target, description, profile, traits)).strip()
     field_done("refined_prompt", refined)
 
-    background = run("final", lambda: get_image(refined, extra_negative=extra_negative, solo=solo))
+    background = run("final", lambda: get_image(refined, extra_negative=negative, solo=solo))
 
     final_image = run("caption", lambda: add_caption(
         name, description, scientific_name, background,
@@ -223,12 +208,13 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
 
 
 def console_emit(event):
-    """ノートブック向けの emit。工程名を挟みながら stdout に流す"""
     kind = event["type"]
     if kind == "start":
         traits = event["traits"]
         print(event["target"])
-        print("{0} / {1} / {2}".format(traits["composition"], traits["danger"], traits["population"]))
+        print("{0} / {1} / {2}".format(
+            traits["body_plan"], traits["register"], traits["composition"]))
+        print("{0} / {1}".format(traits["danger"], traits["population"]))
     elif kind == "step" and event["status"] == "running":
         print("\n[{0}]".format(STEP_LABELS.get(event["step"], event["step"])))
     elif kind == "token":
