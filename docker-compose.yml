@@ -60,6 +60,25 @@ services:
             - count: all
               capabilities: [gpu]
 
+  webui:
+    build:
+      context: .
+      dockerfile: Dockerfile.webui
+    container_name: endemic-webui
+    ports:
+      - "28081:8000"
+    volumes:
+      - ./src:/mnt
+      - ./web:/web
+    environment:
+      - LLAMA_SERVER_URL=${LLAMA_SERVER_URL:-http://llama-server:8080/v1}
+      - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
+    # app と違い healthy を待たない。後段が落ちていても画面は開き、
+    # 「応答なし」と出して起動を促すほうが、繋がらないページより親切なため
+    depends_on:
+      - llama-server
+      - comfyui
+
   app:
     build: .
     container_name: endemic

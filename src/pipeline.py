@@ -1,12 +1,12 @@
-"""カード1枚を作る手順。
+"""カード1枚を作る手順。ノートブックと Web UI の共通の入口。
 
 産地・種別の表、フォント、名前生成器、カードを1枚作る手順をここに置く。
-ノートブック (monster-generator.ipynb) はこれを呼ぶだけなので、生成の中身を
-変えるときに直す場所はこのファイルだけでよい。
+ノートブック (monster-generator.ipynb) と web/server.py はどちらもここを呼ぶので、
+生成の中身を変えるときに直す場所はこのファイルだけでよい。
 
-途中経過は emit で受け取る:
-  emit なし          call_llm が今までどおり stdout にトークンを流す
-  emit=console_emit  ノートブック向けに工程名つきで stdout に流す
+違いは途中経過の受け取り方だけ:
+  emit なし          call_llm が今までどおり stdout にトークンを流す (Web UI 側)
+  emit=console_emit  工程名つきで stdout に流す (ノートブック側)
 """
 
 import json
@@ -18,6 +18,7 @@ from contextlib import nullcontext
 from datetime import datetime
 
 from PIL import ImageFont
+from PIL.PngImagePlugin import PngInfo
 
 from MonsterNameGenerator import MarkovMonsterNameGenerator
 from imageGenerateUtils import add_caption, get_image
@@ -64,10 +65,6 @@ STEPS = [
 STEP_LABELS = dict(STEPS)
 
 _INVALID_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
-
-
-class Cancelled(Exception):
-    """中止が押されたときに工程の切れ目で投げる"""
 
 
 _name_generator = None
@@ -122,21 +119,32 @@ def traits_payload(traits):
     }
 
 
-def generate_card(emit=None, *, name=None, field=None, species=None,
-                  should_cancel=None, save_preview=None, out_dir=OUT_DIR):
+def _png_metadata(card):
+    """カードの情報を PNG のテキストチャンクに入れる。
+
+    PNG に EXIF はまず使われず、この界隈 (ComfyUI / A1111) の通り相場は
+    tEXt / iTXt チャンク。iTXt は UTF-8 なので和文がそのまま入る
+    (tEXt は Latin-1 なので入らない)。Title / Description / Creation Time /
+    Software は PNG 仕様の標準キーワードで、汎用のビューアでも読める。
+    Endemic だけはこちらの都合なので、まとめて JSON で持たせる。
+    """
+    info = PngInfo()
+    info.add_itxt("Title", card["name"])
+    info.add_itxt("Description", card["description"])
+    info.add_itxt("Creation Time", card["created_at"])
+    info.add_itxt("Software", "fictional-creatures")
+    info.add_itxt("Endemic", json.dumps(card, ensure_ascii=False))
+    return info
+
+
+def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT_DIR):
     """カードを1枚作って保存し、(メタデータの dict, 仕上がりの画像) を返す。
 
-    emit(event)        進捗イベントを受け取る関数。省略すると call_llm が
-                       今までどおり stdout にトークンを流す
-    should_cancel()    True を返すと工程の切れ目で Cancelled を投げる
-    save_preview(img, stage) -> url  下書き/清書をブラウザに見せるために保存する
+    emit(event)  進捗イベントを受け取る関数。省略すると call_llm が
+                 今までどおり stdout にトークンを流す
     """
     started = time.time()
     notify = emit if emit is not None else (lambda event: None)
-
-    def check():
-        if should_cancel is not None and should_cancel():
-            raise Cancelled()
 
     def sink(key):
         # emit が無いときは差し替えない。call_llm の既定どおり stdout に出る
@@ -145,7 +153,6 @@ def generate_card(emit=None, *, name=None, field=None, species=None,
         return token_sink(lambda text: emit({"type": "token", "step": key, "text": text}))
 
     def run(key, work):
-        check()
         notify({"type": "step", "step": key, "status": "running"})
         with sink(key):
             value = work()
@@ -181,9 +188,6 @@ def generate_card(emit=None, *, name=None, field=None, species=None,
     solo = not draws_group(traits)  # 群れる生物は複数個体を落とさない
 
     draft = run("draft", lambda: get_image(prompt, extra_negative=extra_negative, solo=solo))
-    if save_preview is not None:
-        notify({"type": "image", "stage": "draft", "url": save_preview(draft, "draft")})
-
     refined = run("refine", lambda: refine_prompt_with_image(
         prompt, draft, target, description, profile, traits)).strip()
     field_done("refined_prompt", refined)
@@ -197,8 +201,6 @@ def generate_card(emit=None, *, name=None, field=None, species=None,
     os.makedirs(out_dir, exist_ok=True)
     stem = "{0}-{1}".format(datetime.now().strftime("%Y%m%d-%H%M%S"),
                             _INVALID_FILENAME.sub("_", name) or "無名")
-    final_image.save(os.path.join(out_dir, stem + ".png"))
-
     card = {
         "image": stem + ".png",
         "name": name,
@@ -214,12 +216,8 @@ def generate_card(emit=None, *, name=None, field=None, species=None,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "seconds": round(time.time() - started, 1),
     }
-    with open(os.path.join(out_dir, stem + ".json"), "w", encoding="utf-8") as handle:
-        json.dump(card, handle, ensure_ascii=False, indent=2)
+    final_image.save(os.path.join(out_dir, stem + ".png"), pnginfo=_png_metadata(card))
 
-    if save_preview is not None:
-        card["preview"] = save_preview(final_image, "final")
-        notify({"type": "image", "stage": "final", "url": card["preview"]})
     notify({"type": "done", "card": card})
     return card, final_image
 
