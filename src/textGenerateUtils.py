@@ -204,32 +204,32 @@ COMPOSITIONS = [
      "directive": "the whole creature centred in frame, entire body visible end to end, "
                   "side-on specimen view, habitat kept plain and secondary",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": True,
-     "shows_group": True, "group_only": False, "solo": True,
+     "shows_group": True, "group_only": False, "solo": True, "palette": "",
      "negative": "cropped, out of frame, extreme close-up"},
     {"weight": 20, "label": "生息地の風景",
      "directive": "wide view of the habitat filling the frame, the creature small and partly "
                   "concealed within the scene, environment shown in full",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": False,
-     "shows_group": True, "group_only": False, "solo": True,
+     "shows_group": True, "group_only": False, "solo": True, "palette": "",
      "negative": "extreme close-up, empty scenery"},
     {"weight": 15, "label": "生態の痕跡",
      "directive": "the creature itself absent from frame, no animal visible, only {trace} "
                   "left behind, shown in situ in the empty habitat",
      "draws_creature": False, "limb_mode": "absent", "magnifies_body": False,
-     "shows_group": False, "group_only": False, "solo": True,
+     "shows_group": False, "group_only": False, "solo": True, "palette": "",
      "negative": "live animal, living creature, animal, eyes, face, moving limbs"},
     {"weight": 15, "label": "体の一部の拡大図",
      "directive": "close-up study of {part} filling the frame, the rest of the body out of "
                   "frame, habitat plain and out of focus behind",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": True,
-     "shows_group": False, "group_only": False, "solo": True,
+     "shows_group": False, "group_only": False, "solo": True, "palette": "",
      "negative": "full body, whole creature, wide shot, distant view"},
     {"weight": 50, "label": "群れの遠景",
      "directive": "distant wide view of a dense swarm of the species massed across the habitat, "
                   "many small individuals scattered and clustered far from the viewer, each one "
                   "tiny and without visible detail, the habitat visible around and beyond them",
      "draws_creature": True, "limb_mode": "distant", "magnifies_body": False,
-     "shows_group": True, "group_only": True, "solo": False,
+     "shows_group": True, "group_only": True, "solo": False, "palette": "",
      "negative": "close-up, macro, single specimen, large creature in foreground, portrait, "
                  "human, people, person, crowd, humanoid figure, standing figures, "
                  "buildings, vehicles"},
@@ -238,14 +238,14 @@ COMPOSITIONS = [
                   "neutral board, the whole body spread out so every part is visible, "
                   "no habitat and no ground",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": True,
-     "shows_group": False, "group_only": False, "solo": True,
+     "shows_group": False, "group_only": False, "solo": True, "palette": "",
      "negative": "habitat, foliage, sky, water, scenery, motion blur, running, flying"},
     {"weight": 10, "label": "擬態と保護色",
      "directive": "the creature concealed against its surroundings by camouflage, its outline "
                   "broken up and matching the colour and texture of the habitat, only part of "
                   "the body separable from the background, the rest of the scene ordinary",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": False,
-     "shows_group": False, "group_only": False, "solo": True,
+     "shows_group": False, "group_only": False, "solo": True, "palette": "drab",
      "negative": "creature isolated on plain background, centred portrait, "
                  "high contrast subject, spotlight on the animal"},
     {"weight": 8, "label": "幼体と成体の比較",
@@ -253,7 +253,7 @@ COMPOSITIONS = [
                   "a small juvenile on one side and the full-grown adult on the other, both "
                   "whole and in the same side-on pose, the difference in size and proportion clear",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": True,
-     "shows_group": False, "group_only": False, "solo": False,
+     "shows_group": False, "group_only": False, "solo": False, "palette": "",
      "negative": "wide shot, habitat scene, crowd, many individuals, different species, "
                  "family scene"},
     {"weight": 8, "label": "夜間の観察",
@@ -261,7 +261,7 @@ COMPOSITIONS = [
                   "night palette, the animal the lightest shape in the frame, everything "
                   "rendered evenly and without glare",
      "draws_creature": True, "limb_mode": "count", "magnifies_body": False,
-     "shows_group": True, "group_only": False, "solo": True,
+     "shows_group": True, "group_only": False, "solo": True, "palette": "light",
      "negative": "daylight, blue sky, sunlight, glowing, bioluminescence, light beams, "
                  "spotlight, harsh shadows, crushed black"},
 ]
@@ -284,6 +284,127 @@ PARTS = [
 LIMB_HEAVY_SPECIES = ("甲殻類",)
 LIMB_HEAVY_WEIGHT = 0.0
 MAX_LIMBS = 8
+
+SIZES = [
+    {"weight": 8, "label": "微小", "ja": "数ミリ以下",
+     "en": "only a few millimetres long, smaller than the debris around it"},
+    {"weight": 20, "label": "数センチ", "ja": "数センチ程度",
+     "en": "a few centimetres long"},
+    {"weight": 25, "label": "数十センチ", "ja": "数十センチ程度",
+     "en": "a few tens of centimetres long"},
+    {"weight": 22, "label": "1メートル", "ja": "1メートル前後",
+     "en": "about a metre long"},
+    {"weight": 15, "label": "数メートル", "ja": "数メートル",
+     "en": "several metres long, larger than everything around it"},
+    {"weight": 10, "label": "巨大", "ja": "十メートルを超える",
+     "en": "over ten metres long, dwarfing its surroundings"},
+]
+SPECIES_SIZES = {
+    "微生物": ("微小",),
+    "小型生物": ("微小", "数センチ"),
+    "虫": ("微小", "数センチ"),
+    "巨大生物": ("数メートル", "巨大"),
+}
+_unsized = {label for labels in SPECIES_SIZES.values() for label in labels} - {
+    row["label"] for row in SIZES}
+assert not _unsized, f"SPECIES_SIZES に SIZES に無い label があります: {_unsized}"
+
+PALETTES = [
+    {"weight": 14, "label": "土と枯葉", "kinds": (),
+     "ja": "土や枯れ葉に似た茶褐色を基調とし",
+     "en": "muted earth brown and dead-leaf ochre palette",
+     "conspicuous": False, "dark": False},
+    {"weight": 12, "label": "苔と葉", "kinds": (),
+     "ja": "苔や葉に似た緑を基調とし",
+     "en": "muted moss green and olive palette",
+     "conspicuous": False, "dark": False},
+    {"weight": 12, "label": "岩と灰", "kinds": (),
+     "ja": "岩や灰に似た灰色を基調とし",
+     "en": "muted stone grey and ash palette",
+     "conspicuous": False, "dark": False},
+    {"weight": 10, "label": "骨と雪", "kinds": (),
+     "ja": "骨や雪のような白を基調とし",
+     "en": "pale bone white and chalk palette",
+     "conspicuous": False, "dark": False},
+    {"weight": 8, "label": "墨", "kinds": (),
+     "ja": "墨のような黒を基調とし",
+     "en": "near-black charcoal and soot palette",
+     "conspicuous": False, "dark": True},
+    {"weight": 8, "label": "深い青", "kinds": (),
+     "ja": "藍や紺のような深い青を基調とし",
+     "en": "deep muted indigo and slate blue palette",
+     "conspicuous": False, "dark": False},
+    {"weight": 8, "label": "錆と赤土", "kinds": (),
+     "ja": "錆や赤土のような赤褐色を基調とし",
+     "en": "muted rust red and oxidised orange palette",
+     "conspicuous": True, "dark": False},
+    {"weight": 7, "label": "黄土と琥珀", "kinds": (),
+     "ja": "黄土や琥珀のような黄色を基調とし",
+     "en": "dull ochre yellow and amber palette",
+     "conspicuous": True, "dark": False},
+    {"weight": 7, "label": "半透明", "kinds": ("軟体", "原始", "群体", "遊泳", "殻", "放射", "菌", "節足"),
+     "ja": "色素がほとんど無く半透明で",
+     "en": "translucent and almost colourless, only faintly tinted",
+     "conspicuous": False, "dark": False},
+    {"weight": 6, "label": "紫紺", "kinds": (),
+     "ja": "紫紺やすみれ色のような紫を基調とし",
+     "en": "muted violet and dusty purple palette",
+     "conspicuous": True, "dark": False},
+    {"weight": 5, "label": "警告色", "kinds": (),
+     "ja": "全体は地味な体色で、一か所だけに鮮やかな警告色の斑があり",
+     "en": "drab grey-brown body kept unsaturated except for one small red warning patch",
+     "conspicuous": True, "dark": False},
+    {"weight": 5, "label": "白黒の斑", "kinds": (),
+     "ja": "白と黒のはっきりした斑や縞に分かれ",
+     "en": "stark black and white patterned markings",
+     "conspicuous": True, "dark": False},
+]
+SURFACES = [
+    {"weight": 14, "label": "なめらか", "kinds": (),
+     "ja": "つやの無いなめらかな体表をしている",
+     "en": "smooth matte surface without gloss"},
+    {"weight": 10, "label": "細かな毛", "kinds": ("脊椎", "翼", "節足", "植物", "菌"),
+     "ja": "全身が細かい毛に覆われている",
+     "en": "covered all over in fine short hair"},
+    {"weight": 10, "label": "鱗", "kinds": ("脊椎", "蛇", "遊泳"),
+     "ja": "重なり合う鱗に覆われている",
+     "en": "overlapping scales covering the body"},
+    {"weight": 10, "label": "硬い殻質", "kinds": ("節足", "殻", "放射", "固着"),
+     "ja": "硬い殻質の板に覆われている",
+     "en": "hard chitinous plates over the body"},
+    {"weight": 9, "label": "粘液", "kinds": ("軟体", "原始", "群体", "蛇", "菌", "遊泳"),
+     "ja": "薄い粘液に覆われてぬめる",
+     "en": "damp mucous film over the surface, matte and not shiny"},
+    {"weight": 9, "label": "粉を吹く", "kinds": ("植物", "菌", "節足", "群体", "固着"),
+     "ja": "乾いてざらつき、白い粉を吹いている",
+     "en": "dry powdery bloom dusting the surface"},
+    {"weight": 9, "label": "棘と突起", "kinds": (),
+     "ja": "細かな棘や突起が一面に生えている",
+     "en": "covered in fine spines and blunt tubercles"},
+    {"weight": 8, "label": "革質のしわ", "kinds": ("脊椎", "蛇", "軟体", "原始", "翼"),
+     "ja": "しわの寄った厚い革質の体表をしている",
+     "en": "thick wrinkled leathery hide"},
+    {"weight": 7, "label": "浮き出た脈", "kinds": ("軟体", "植物", "菌", "群体", "原始"),
+     "ja": "体表に網目状の脈が浮き出ている",
+     "en": "raised network of veins across the surface"},
+    {"weight": 7, "label": "ひび割れ", "kinds": ("植物", "固着", "殻", "群体", "菌"),
+     "ja": "地衣のようにひび割れた硬い表面をしている",
+     "en": "cracked crust mottled like lichen"},
+    {"weight": 7, "label": "繊毛", "kinds": ("原始", "群体", "軟体", "放射", "固着"),
+     "ja": "細かな繊毛が一面に生えている",
+     "en": "dense fringe of fine cilia over the whole surface"},
+    {"weight": 6, "label": "付着物", "kinds": (),
+     "ja": "砂粒や結晶が体表に付着している",
+     "en": "grains of sand and small crystals stuck to the surface"},
+]
+_unknown_look_kinds = ({kind for row in PALETTES + SURFACES for kind in row["kinds"]}
+                       - set(DEFAULT_KINDS))
+assert not _unknown_look_kinds, \
+    f"PALETTES/SURFACES に BODY_PLANS に無い kind があります: {_unknown_look_kinds}"
+_lookless = {kind for kind in DEFAULT_KINDS for rows in (PALETTES, SURFACES)
+             if not [row for row in rows if not row["kinds"] or kind in row["kinds"]]}
+assert not _lookless, f"PALETTES/SURFACES に候補の無い kind があります: {_lookless}"
+
 DANGERS = [
     (25, "人間には全く無害"),
     (35, "刺激すると刺す、あるいは咬む程度"),
@@ -361,17 +482,40 @@ def _composition_weight(row, species, body_plan):
     return row["weight"]
 
 
+def _size(species=None):
+    labels = SPECIES_SIZES.get(species)
+    pool = [row for row in SIZES if not labels or row["label"] in labels]
+    return _pick(pool, [row["weight"] for row in pool])
+
+
+def _palette_fits(row, composition):
+    wanted = composition["palette"]
+    return not ((wanted == "drab" and row["conspicuous"])
+                or (wanted == "light" and row["dark"]))
+
+
+def _look(rows, kind, fits=lambda row: True):
+    pool = [row for row in rows if not row["kinds"] or kind in row["kinds"]]
+    pool = [row for row in pool if fits(row)] or pool
+    return _pick(pool, [row["weight"] for row in pool])
+
+
 def pick_traits(species=None):
     population = random.choices(POPULATIONS, weights=[p[0] for p in POPULATIONS])[0]
     body_plan = _body_plan(species)
     pool = [row for row in COMPOSITIONS if population[2] or not row["group_only"]]
     weights = [_composition_weight(row, species, body_plan) for row in pool]
+    composition = _composition(_pick(pool, weights), body_plan)
     return {
         "danger": random.choices([d[1] for d in DANGERS], weights=[d[0] for d in DANGERS])[0],
         "population": {"label": population[1], "group": population[2]},
         "body_plan": body_plan,
+        "size": _size(species),
+        "palette": _look(PALETTES, body_plan["kind"],
+                         lambda row: _palette_fits(row, composition)),
+        "surface": _look(SURFACES, body_plan["kind"]),
         "register": _pick(REGISTERS, [r["weight"] for r in REGISTERS]),
-        "composition": _composition(_pick(pool, weights), body_plan),
+        "composition": composition,
     }
 
 
@@ -385,6 +529,24 @@ def _body_plan_of(traits):
     if traits and traits.get("body_plan"):
         return traits["body_plan"]
     return BODY_PLANS[0]
+
+
+def _size_of(traits):
+    if traits and traits.get("size"):
+        return traits["size"]
+    return SIZES[2]
+
+
+def _palette_of(traits):
+    if traits and traits.get("palette"):
+        return traits["palette"]
+    return PALETTES[0]
+
+
+def _surface_of(traits):
+    if traits and traits.get("surface"):
+        return traits["surface"]
+    return SURFACES[0]
 
 
 def _register_of(traits):
@@ -457,10 +619,13 @@ def _with_directives(prompt, composition, foreground_group, body_plan=None):
 
 def generate_profile(target, description, traits):
     plan = _body_plan_of(traits)
+    size, palette, surface = _size_of(traits), _palette_of(traits), _surface_of(traits)
     if plan["limbs"] == "count":
         sample_target, sample_body, sample_sheet = _ZATON, Kyomuton, KyomutonProfile
         sample_traits = ("人間への危険度は「無害。刺激しても壁の隙間へ逃げ込むのみ」、"
-                         "個体数は「記録が数例しかない希少種」としてください。")
+                         "個体数は「記録が数例しかない希少種」としてください。"
+                         "体長の行は数センチ程度の大きさにし、体色と質感の行は、"
+                         "岩や灰に似た灰色を基調とし、薄い粘液に覆われてぬめるものとして書いてください。")
         cap = min(plan["limb_cap"], MAX_LIMBS)
         limb_rule = (
             "付属肢の行には、脚・腕・触手・翼・ひれ・触角の本数を必ず算用数字で書き、片側何本かも添えてください。"
@@ -470,7 +635,9 @@ def generate_profile(target, description, traits):
     else:
         sample_target, sample_body, sample_sheet = _MIZU, Mizumodoki, MizumodokiProfile
         sample_traits = ("人間への危険度は「飲み込むと体内に寄生する。触れるだけなら害はない」、"
-                         "個体数は「生息地では普通に見られる」としてください。")
+                         "個体数は「生息地では普通に見られる」としてください。"
+                         "体長の行は数十センチ程度の大きさにし、体色と質感の行は、"
+                         "色素がほとんど無く半透明で、薄い粘液に覆われてぬめるものとして書いてください。")
         limb_rule = (
             "この体のつくりに脚・腕・触手・翼・ひれ・触角はありません。"
             "付属肢の行は「付属肢は無い。」から始め、そのあとに体を支えたり位置を変えたりしている"
@@ -496,6 +663,9 @@ def generate_profile(target, description, traits):
                 f"この生物の体のつくりは「{plan['label']}」——{plan['ja']}——です。"
                 "頭部・付属肢・体色と質感・行動と姿勢の各行は、この体のつくりから外れないように書いてください。\n\n"
                 f"{limb_rule}\n\n"
+                f"体長の行は{size['ja']}の大きさにし、体色と質感の行は、"
+                f"{palette['ja']}、{surface['ja']}ものとして書いてください。"
+                "ただし説明文が大きさや色に触れている場合は、そちらに合わせてください。\n\n"
                 f"人間への危険度は「{traits['danger']}」、個体数は「{traits['population']['label']}」として、"
                 "それに合う姿・行動にしてください。"
                 "上の説明文と矛盾しない範囲で、説明文には書かれていない見た目の細部を補ってください。"
@@ -570,6 +740,7 @@ def _subject_note(composition, foreground_group, plan):
 def generate_prompt(target, description, profile="", traits=None):
     composition = _composition_of(traits)
     plan = _body_plan_of(traits)
+    size, palette, surface = _size_of(traits), _palette_of(traits), _surface_of(traits)
     foreground_group = draws_foreground_group(traits)
     subject_note = _subject_note(composition, foreground_group, plan)
     if plan["limbs"] == "count":
@@ -614,6 +785,19 @@ def generate_prompt(target, description, profile="", traits=None):
         f"英語では次のように書きます: {plan['en']}。この形から外れる描写はしないでください。\n\n"
         if composition["draws_creature"] else ""
     )
+    look_note = (
+        f"体色と体表は英語では次のように書きます: {palette['en']}, {surface['en']}。"
+        f"この色と質感は必ずプロンプトに入れ、ほかの色で塗り替えないでください。\n\n"
+        if composition["draws_creature"] else ""
+    )
+    scale_tail = ("残された痕跡の大きさがこれに見合うように書いてください。"
+                  if not composition["draws_creature"]
+                  else "周囲のものとの対比でその大きさが伝わるように書いてください。")
+    scale_note = (
+        f"この生物の大きさは{size['ja']}で、英語では {size['en']} と書きます。{scale_tail}"
+        "説明文や裏設定がこれと違う大きさを書いている場合は、そちらに合わせてください。\n\n"
+        if not composition["magnifies_body"] else ""
+    )
     group_note = (
         f"この生物は群れをつくり、画面には同じ姿の個体が多数写ります。英語では次のように指定されています: "
         f"{GROUP_DIRECTIVE}。群れの密度や、集まっているときの行動が伝わる描写を入れてください。"
@@ -631,6 +815,8 @@ def generate_prompt(target, description, profile="", traits=None):
                 f"この絵の構図は「{composition['label']}」で、英語では次のように指定されています: "
                 f"{composition['directive']}。この構図に合う内容だけを書いてください。\n\n"
                 f"{body_note}"
+                f"{look_note}"
+                f"{scale_note}"
                 f"{group_note}"
                 f"{limb_note}\n\n"
                 "プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます。\n\n"

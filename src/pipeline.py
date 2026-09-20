@@ -126,6 +126,9 @@ def traits_payload(traits):
         "population": traits["population"]["label"],
         "group": bool(traits["population"]["group"]),
         "body_plan": traits["body_plan"]["label"],
+        "size": traits["size"]["label"],
+        "palette": traits["palette"]["label"],
+        "surface": traits["surface"]["label"],
         "register": traits["register"]["label"],
         "composition": traits["composition"]["label"],
         "directive": traits["composition"]["directive"],
@@ -256,6 +259,8 @@ def console_emit(event):
         print(event["target"])
         print("{0} / {1} / {2}".format(
             traits["body_plan"], traits["register"], traits["composition"]))
+        print("{0} / {1} / {2}".format(
+            traits["size"], traits["palette"], traits["surface"]))
         print("{0} / {1}".format(traits["danger"], traits["population"]))
     elif kind == "step" and event["status"] == "running":
         print("\n[{0}]".format(STEP_LABELS.get(event["step"], event["step"])))
