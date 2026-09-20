@@ -30,7 +30,7 @@ h1 {
 }
 
 #go {
-  padding: .85rem 4.5rem;
+  padding: .85rem clamp(1.5rem, 8vw, 4rem);
   border: 1px solid var(--ink); border-radius: 0;
   background: var(--ink); color: var(--sheet);
   font: inherit; font-size: 1.3rem; font-weight: 800; letter-spacing: .5em;

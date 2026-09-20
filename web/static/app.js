@@ -9,7 +9,7 @@ let timer = null;
 function clock() {
   const seconds = Math.max(0, Math.floor(Date.now() / 1000 - startedAt));
   note.className = "";
-  note.innerHTML = "観察中 <b></b>";
+  note.innerHTML = "探索中 <b></b>";
   note.querySelector("b").textContent =
     `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -29,7 +29,7 @@ function show(state) {
   startedAt = 0;
   if (state.error) {
     note.className = "is-alarm";
-    note.textContent = `観察できませんでした — ${state.error}`;
+    note.textContent = `探索できませんでした — ${state.error}`;
   } else {
     note.className = "";
     note.textContent = "";
@@ -62,7 +62,7 @@ go.addEventListener("click", async () => {
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
     note.className = "is-alarm";
-    note.textContent = detail.detail || "観察を始められませんでした。";
+    note.textContent = detail.detail || "探索を始められませんでした。";
   }
   poll();
 });

@@ -40,7 +40,7 @@ async def index():
 @app.post("/api/generate")
 async def generate():
     if _state["running"]:
-        raise HTTPException(status_code=409, detail="すでに観察中です")
+        raise HTTPException(status_code=409, detail="すでに探索中です")
     _state.update(running=True, image=None, error=None)
     asyncio.create_task(_generate())
     return {"running": True}
