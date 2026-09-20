@@ -40,6 +40,12 @@ NEGATIVE_PROMPT = (
 
 SOLO_NEGATIVE = "multiple creatures, duplicate specimen"
 
+CUTAWAY_NEGATIVE = (
+    "cross-section, cross-sectional view, cutaway view, body cut open, sliced open, "
+    "split open body, dissection, dissected specimen, exposed viscera, "
+    "internal anatomy diagram, x-ray view"
+)
+
 GEN_WIDTH, GEN_HEIGHT = 1280, 768
 OUT_WIDTH, OUT_HEIGHT = 800, 480
 
@@ -118,11 +124,14 @@ def require_models():
 
 
 def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=GEN_HEIGHT,
-              seed=None, steps=STEPS, cfg=CFG, timeout=600, extra_negative="", solo=True):
+              seed=None, steps=STEPS, cfg=CFG, timeout=600, extra_negative="", solo=True,
+              inside_body=False):
     if seed is None:
         seed = random.randint(0, 2 ** 63 - 1)
     if solo:
         negative_prompt = f"{negative_prompt}, {SOLO_NEGATIVE}"
+    if not inside_body:
+        negative_prompt = f"{negative_prompt}, {CUTAWAY_NEGATIVE}"
     if extra_negative.strip():
         negative_prompt = f"{negative_prompt}, {extra_negative.strip()}"
 

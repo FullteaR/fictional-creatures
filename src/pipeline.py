@@ -53,6 +53,7 @@ SPECIES = [
     "外来種", "家畜化された生物", "半水生生物", "樹上生物", "地中生物",
 ]
 SUFFIXABLE_SPECIES = ("貝", "草", "鳥", "魚", "虫", "苔")
+INSIDE_BODY_SUFFIX = "の体内"
 
 STEPS = [
     ("name", "名称"),
@@ -104,7 +105,7 @@ def build_target(field=None, species=None, name=None):
     field = field or random.choice(FIELDS)
     species = species or random.choice(SPECIES)
     if field == "モンスターの体内":
-        field = generator.generate() + "の体内"
+        field = generator.generate() + INSIDE_BODY_SUFFIX
     if not given and species in SUFFIXABLE_SPECIES and random.randint(0, 1) == 1:
         name = name + species
     return name, field, species, "{0}にて観測される架空の{1}「{2}」".format(field, species, name)
@@ -183,13 +184,15 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
 
     negative = extra_negative(traits)
     solo = draws_solo(traits)
+    inside_body = field.endswith(INSIDE_BODY_SUFFIX)
 
     seed = random.getrandbits(63)
     current, notes, plates, rounds = prompt, "", [], []
     while True:
         plate_negative = ", ".join(part for part in (negative, notes) if part)
         plates.append(run("draft" if not rounds else "final", lambda: get_image(
-            current, extra_negative=plate_negative, solo=solo, seed=seed)))
+            current, extra_negative=plate_negative, solo=solo, seed=seed,
+            inside_body=inside_body)))
         review = run("review", lambda: review_image(
             plates[-1], current, target, description, profile, traits))
         rounds.append({"prompt": current, "negative": notes, "review": review_payload(review)})

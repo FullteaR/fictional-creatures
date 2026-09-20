@@ -248,14 +248,6 @@ COMPOSITIONS = [
      "shows_group": False, "group_only": False, "solo": True,
      "negative": "creature isolated on plain background, centred portrait, "
                  "high contrast subject, spotlight on the animal"},
-    {"weight": 8, "label": "体の断面図",
-     "directive": "a cutaway view of the creature with the near side of the body opened, "
-                  "internal organs and body cavities laid out flat and plainly separated, "
-                  "the outline of the whole organism still readable, plain background",
-     "draws_creature": True, "limb_mode": "count", "magnifies_body": True,
-     "shows_group": False, "group_only": False, "solo": True,
-     "negative": "wide shot, habitat scene, blood, gore, wet viscera, photorealistic organs, "
-                 "surgical instruments"},
     {"weight": 8, "label": "幼体と成体の比較",
      "directive": "two individuals of the same species side by side on a plain background, "
                   "a small juvenile on one side and the full-grown adult on the other, both "
