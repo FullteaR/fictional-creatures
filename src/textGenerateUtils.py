@@ -291,24 +291,25 @@ GROUP_DIRECTIVE = ("many individuals of the same species together in the scene, 
                    "one specimen in the foreground shown clearly and in full, "
                    "the others smaller and further back, all identical in form")
 
+_OPENING = ("一文目はその生物が何であるかを名詞で短く言い切ってください"
+            "（例:「洞窟の壁に張り付いて生活している生物。」「水に擬態した原生生物。」）。"
+            "図鑑の解説文なので、全体を三人称で書いてください。採集や観察の経緯に触れるときは"
+            "「採集されている」「報告がある」のように、誰の行為とも特定しない書き方にしてください。"
+            "日付や体の細部は二文目以降に回してください。")
 _BURIRIA = "古代の湖にて観測される甲殻類「ブリリア」"
 _MIZU = "深海にて観測される架空の生物「ミズモドキ」"
 _ZATON = "アンカラ洞窟にて観測される架空の生物「ザトン」"
 REGISTERS = [
-    {"weight": 40, "label": "図鑑の記述",
+    {"weight": 50, "label": "図鑑の記述",
      "instruction": "観察された事実だけを淡々と、図鑑の解説文の調子で書いてください。",
      "samples": ((_BURIRIA, EsukaKnight), (_MIZU, Mizumodoki), (_ZATON, Kyomuton))},
-    {"weight": 20, "label": "観察日誌",
-     "instruction": "現場で書きとめた観察日誌の調子で、日付や天候に触れ、見た順に書いてください。",
-     "samples": ((_ZATON, KyomutonNisshi), (_MIZU, MizumodokiNisshi))},
-    {"weight": 20, "label": "土地の伝承",
-     "instruction": "その土地の言い伝えや俗信を交えた調子で、"
-                    "誰がどう呼び、どう扱ってきたかを書いてください。",
+    {"weight": 25, "label": "土地の伝承",
+     "instruction": "その土地に伝わる言い伝えや俗信を交えて、"
+                    "どう呼ばれ、どう扱われてきたかを書いてください。",
      "samples": ((_ZATON, KyomutonDenshou), (_MIZU, MizumodokiDenshou))},
-    {"weight": 20, "label": "調査報告",
-     "instruction": "調査報告書の調子で、採集の経緯と計測値、"
-                    "まだ分かっていない点を挙げて書いてください。",
-     "samples": ((_ZATON, KyomutonHoukoku), (_MIZU, MizumodokiHoukoku))},
+    {"weight": 25, "label": "研究の記録",
+     "instruction": "記載や発見の経緯、計測値、まだ分かっていない点を交えて書いてください。",
+     "samples": ((_ZATON, KyomutonKiroku), (_MIZU, MizumodokiKiroku))},
 ]
 
 
@@ -699,12 +700,12 @@ def generate_description(target, traits=None):
     messages = []
     for phrase, text in register["samples"]:
         messages.append({"role": "user", "content": (
-            f"{phrase}について3から5文程度で教えて下さい。{register['instruction']}"
+            f"{phrase}について3から5文程度で教えて下さい。{_OPENING}{register['instruction']}"
             "markdown等は使用せず文章のみで回答してください")})
         messages.append({"role": "assistant", "content": text})
     messages.append({"role": "user", "content": (
-        f"いいですね。次は{target}について3から5文程度で教えて下さい。"
-        f"この生物の体のつくりは「{plan['label']}」——{plan['ja']}——です。"
-        f"この体のつくりに合う姿・動き・暮らし方で書いてください。{register['instruction']}"
+        f"いいですね。次は{target}について3から5文程度で教えて下さい。{_OPENING}"
+        f"この生物の姿は{plan['ja']}です。"
+        f"その体で何をして暮らしているかが伝わるように書いてください。{register['instruction']}"
         "markdown等は使用せず文章のみで回答してください")})
     return call_llm(messages)
