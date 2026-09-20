@@ -1,7 +1,5 @@
 FROM python:3.12-slim
 
-# 推論はすべて別コンテナ (llama-server / comfyui) に HTTP で投げるので、
-# このコンテナに GPU も PyTorch も要らない。ここはオーケストレーション専用。
 RUN pip install --no-cache-dir \
 	jupyter \
 	numpy \

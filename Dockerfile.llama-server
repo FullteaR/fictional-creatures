@@ -12,10 +12,6 @@ RUN cmake llama.cpp -B llama.cpp/build -DGGML_CUDA=ON -DBUILD_SHARED_LIBS=OFF \
 
 ENV PATH="/llama.cpp/build/bin:$PATH"
 ENTRYPOINT ["llama-server"]
-# Qwen3.8 は既定で thinking mode (reasoning_effort=xhigh) に入り、短い生成でも
-# 思考だけでトークンを使い切って content が空になる。用途が短文生成なので off にし、
-# サンプリングは Qwen 公式の non-thinking (instruct) 推奨値に合わせる。
-# ctx は VRAM が厳しい (LLM 14.3 + mmproj 0.9 + ComfyUI 5.7 GiB) ため 16384 に抑える。
 CMD [ \
     "--model", "/models/Qwen3.8-27B-UD-Q4_K_S.gguf", \
     "--mmproj", "/models/mmproj-Qwen3.8-27B-Q8_0.gguf", \
@@ -29,14 +25,6 @@ CMD [ \
     "--min-p", "0.0", \
     "--presence-penalty", "1.5", \
     "--ctx-size", "16384", \
-    # llama-server のプロンプトキャッシュはホスト RAM 上にあり、既定の上限が
-    # 8192MiB = 8GB。さらに --cache-idle-slots が既定で有効なため、タスクが来る
-    # たびにアイドルスロットの KV が VRAM からホスト RAM へ退避される。実測で
-    # 1 リクエストあたり 457MiB 積み上がり、このホストの RAM (3.8GiB) と swap
-    # (8GiB) を食い潰して llama-server が OOM kill される (exit 137)。そうなると
-    # restart ポリシーが無いので復帰せず、以降ノートブックは connection error に
-    # なり続ける。プロンプトはカードごとにほぼ別物でキャッシュ命中率が低いため、
-    # 0 で無効化する。RAM を増設したら 512〜1024 程度まで戻してもよい。
     "--cache-ram", "0", \
     "--alias", "local-model" \
 ]

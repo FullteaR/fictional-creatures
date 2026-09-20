@@ -1,7 +1,6 @@
 """ComfyUI 経由の画像生成が通るかを確認するスモークテスト。
 
     docker compose exec app python /mnt/smoke_test_comfyui.py
-    # ホストから直接叩く場合:
     COMFYUI_URL=http://localhost:8188 python src/smoke_test_comfyui.py
 """
 import json

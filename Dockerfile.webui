@@ -1,7 +1,5 @@
 FROM python:3.12-slim
 
-# app (Jupyter) と同じく、推論はすべて llama-server / comfyui に HTTP で投げる。
-# ここも GPU も PyTorch も要らない。src/ の生成モジュールをそのまま読んで使う。
 RUN pip install --no-cache-dir \
 	fastapi \
 	"uvicorn[standard]" \
@@ -10,8 +8,6 @@ RUN pip install --no-cache-dir \
 	python-Levenshtein \
 	openai
 
-# コードは compose 側で /web と /mnt にマウントする。src と同じく、
-# 直したらコンテナを再起動するだけで反映される
 ENV PYTHONUNBUFFERED=1 \
 	PIPELINE_DIR=/mnt
 
