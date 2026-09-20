@@ -98,6 +98,42 @@ def _request(path, payload=None, timeout=60):
         raise RuntimeError(f"ComfyUI {path} -> HTTP {e.code}: {e.read().decode(errors='replace')[:2000]}") from None
 
 
+# モデルは3つとも ComfyUI 側のディレクトリに置かれていないと、生成の一発目で
+# ノード検証エラーになる。落ちる前に見えているかどうかだけ確かめておく。
+_MODEL_SLOTS = (
+    ("UNETLoader", "unet_name", DIFFUSION_MODEL),
+    ("CLIPLoader", "clip_name", TEXT_ENCODER),
+    ("VAELoader", "vae_name", VAE),
+)
+
+
+def check_models():
+    """3つのモデルが ComfyUI から見えているか調べ、[{node, file, ok}, ...] を返す"""
+    rows = []
+    for node, field, want in _MODEL_SLOTS:
+        try:
+            choices = _request(f"/object_info/{node}", timeout=15)[node]["input"]["required"][field][0]
+            ok = want in choices
+        except Exception:
+            ok = False
+        rows.append({"node": node, "file": want, "ok": ok})
+    return rows
+
+
+def require_models():
+    """見つからなければ例外にする。ノートブックの冒頭で走らせる想定"""
+    print("ComfyUI:", COMFYUI_URL)
+    missing = []
+    for row in check_models():
+        print(f"  {row['node']:<12} {row['file']:<32} {'OK' if row['ok'] else 'NOT FOUND'}")
+        if not row["ok"]:
+            missing.append(row["file"])
+    if missing:
+        raise RuntimeError(
+            "ComfyUI 側にモデルが見つかりません: " + ", ".join(missing)
+            + "\nmodels/comfyui/ 以下の配置を CLAUDE.md の Image models 節で確認してください")
+
+
 def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=GEN_HEIGHT,
               seed=None, steps=STEPS, cfg=CFG, timeout=600, extra_negative="", solo=True):
     """ComfyUI サーバーに HTTP 経由で生成を依頼し、PIL Image を返す"""

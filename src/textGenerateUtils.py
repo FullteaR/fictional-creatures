@@ -1,7 +1,9 @@
 import os
 import base64
+import contextvars
 import random
 import re
+from contextlib import contextmanager
 from io import BytesIO
 from openai import OpenAI
 from sampleMonsters import *
@@ -10,6 +12,29 @@ LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://llama-server:8080/
 _client = OpenAI(base_url=LLAMA_SERVER_URL, api_key="dummy")
 _MODEL = "local-model"
 
+
+# 生成トークンの出し先。ノートブックからは stdout に流せばよいが、Web UI は
+# 同じトークンをブラウザへ転送したいので、差し替えられるようにしてある。
+# ContextVar なのでワーカースレッドごとに独立する。
+_token_sink = contextvars.ContextVar("token_sink", default=None)
+
+
+@contextmanager
+def token_sink(sink):
+    """このブロックの中で call_llm が吐くトークンを sink に渡す。抜ければ stdout に戻る"""
+    handle = _token_sink.set(sink)
+    try:
+        yield
+    finally:
+        _token_sink.reset(handle)
+
+
+def _emit(text):
+    sink = _token_sink.get()
+    if sink is None:
+        print(text, end="", flush=True)
+    else:
+        sink(text)
 
 
 def call_llm(messages, max_tokens=2048):
@@ -30,13 +55,13 @@ def call_llm(messages, max_tokens=2048):
         choice = chunk.choices[0]
         delta = choice.delta.content or ""
         if delta:
-            print(delta, end="", flush=True)
+            _emit(delta)
             chunks.append(delta)
         if choice.finish_reason:
             finish_reason = choice.finish_reason
-    print()
+    _emit("\n")
     if finish_reason == "length":
-        print(f"[warn] max_tokens={max_tokens} に到達して打ち切られました（繰り返しループの可能性）")
+        _emit(f"[warn] max_tokens={max_tokens} に到達して打ち切られました（繰り返しループの可能性）\n")
     return "".join(chunks)
 
 

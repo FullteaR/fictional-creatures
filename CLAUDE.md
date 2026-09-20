@@ -38,10 +38,13 @@ Both back ends — `llama-server` and `comfyui` — set `restart: unless-stopped
 
 ## Architecture
 
-### Generation pipeline (`src/monster-generator.ipynb`)
+### Generation pipeline (`src/pipeline.py`)
 
-1. **Name**: `MarkovMonsterNameGenerator` (bigram Markov chain) generates a Japanese katakana name, rejecting names too similar (Levenshtein distance ≤ 1-2) to training names.
-2. **Target string**: Combines random habitat (`fields`) + random species type (`spicies`) + name into a description target like `「深海にて観測される架空の魚「ミロカルガン」」`.
+`generate_card()` is the whole of it, and the notebook's loop is three lines that call it. The
+tables, the fonts and the name generator live here too, so there is one place to change any of it.
+
+1. **Name**: `MarkovMonsterNameGenerator` (bigram Markov chain) generates a Japanese katakana name, rejecting names too similar (Levenshtein distance ≤ 1-2) to training names. Training is 4246 names against every candidate, so `pipeline.name_generator()` trains once and hands back the same instance.
+2. **Target string**: `build_target()` combines random habitat (`FIELDS`) + random species type (`SPECIES`) + name into a description target like `「深海にて観測される架空の魚「ミロカルガン」」`. Any of the three can be pinned instead; a name given by hand does not get the 貝/草/鳥/魚 suffix, since you asked for that exact name.
 3. **Hidden traits** (`textGenerateUtils.pick_traits`): danger to humans, population, and the composition of the plate, drawn from weighted tables in code. None of it reaches the card — see *Hidden settings* below.
 4. **Text generation** (`textGenerateUtils.py`): one LLM call each, few-shot prompted with `sampleMonsters.py` examples:
    - `generate_description`: 3-5 sentence Japanese description
@@ -49,7 +52,19 @@ Both back ends — `llama-server` and `comfyui` — set `restart: unless-stopped
    - `generate_prompt`: English image prompt (comma-separated descriptors; Anima's Qwen text encoder has no 77-token limit, so long prompts pass through intact), written from the description **and** the profile
    - `generate_scientific_name`: two-word Latin scientific name, reduced to its first line
 5. **Image generation** (`imageGenerateUtils.py`): prepends `STYLE_PREFIX` (see *Keeping the output from looking AI-generated*), POSTs a ComfyUI API-format workflow to `comfyui:8188`, polls `/history/{prompt_id}`, fetches the PNG via `/view`. Generates at 1280×768 and downscales to 800×480. A draft image is generated first, fed back to the model by `refine_prompt_with_image` (the LLM sees its own output and rewrites the prompt), and the refined prompt produces the final image. **This is the only refinement pass in the pipeline** — an earlier blanket self-refinement loop over every text call was removed; it doubled the LLM calls and, on the scientific name, "improved" a two-word binomial into a paragraph of Japanese, whose width then pushed the whole caption off the canvas.
-6. **Captioning** (`imageGenerateUtils.py:add_caption`): Uses `janome` for Japanese word-boundary tokenization to wrap description text, overlays semi-transparent rounded rectangle at a random corner of the image. The scientific name is set in italic. `ipagp.ttf` has no italic face, so the binomial — and only the binomial, not the `(学名: )` label — is drawn in `src/NotoSerif-Italic.ttf` (Noto Serif Italic, OFL-1.1, license alongside it; override with `ITALIC_FONT`). That font covers Latin/Greek/Cyrillic only, so when the model returns a non-Latin scientific name `drawItalicText` falls back to shearing `ipagp` glyphs rather than rendering tofu. Because the two faces have different ascents, the label and the name are aligned on the baseline (`anchor="ls"`), not the top. The corner offsets are clamped to the canvas, so unexpectedly long text degrades to a top-left caption rather than being drawn off-screen.
+6. **Saving**: `<YYYYmmdd-HHMMSS>-<name>.png` in `src/endemic/`, with a `<same stem>.json` beside it holding the description, the hidden profile, both prompts and the rolled traits. The notebook used to save `<loop index>-<name>.png` and no metadata, which collided between runs — `src/endemic/` still has three different `0-*.png` — and dropped the hidden profile on the floor.
+7. **Captioning** (`imageGenerateUtils.py:add_caption`): Uses `janome` for Japanese word-boundary tokenization to wrap description text, overlays semi-transparent rounded rectangle at a random corner of the image. The scientific name is set in italic. `ipagp.ttf` has no italic face, so the binomial — and only the binomial, not the `(学名: )` label — is drawn in `src/NotoSerif-Italic.ttf` (Noto Serif Italic, OFL-1.1, license alongside it; override with `ITALIC_FONT`). That font covers Latin/Greek/Cyrillic only, so when the model returns a non-Latin scientific name `drawItalicText` falls back to shearing `ipagp` glyphs rather than rendering tofu. Because the two faces have different ascents, the label and the name are aligned on the baseline (`anchor="ls"`), not the top. The corner offsets are clamped to the canvas, so unexpectedly long text degrades to a top-left caption rather than being drawn off-screen.
+
+Progress comes back through the optional `emit` argument. Omit it and `call_llm` prints the
+streamed tokens itself, exactly as it always has; pass `pipeline.console_emit` — which is what the
+notebook does — and each step is labelled as it runs. `emit` is a plain callback taking one dict,
+so anything else that wants to follow a generation can supply its own. `generate_card` returns
+`(card, image)`: the metadata dict that also becomes the JSON sidecar, and the finished image,
+which the notebook needs for its contact sheet.
+
+`imageGenerateUtils.require_models()` is the preflight the notebook runs before the loop. It asks
+ComfyUI whether all three weight files are visible and raises if one is not, rather than letting
+the first card die inside a node validation error.
 
 ### Image client (`imageGenerateUtils.py`)
 
@@ -117,13 +132,14 @@ llama-server also warns that Qwen-VL wants `--image-min-tokens 1024` for groundi
 
 ### LLM client (`textGenerateUtils.py`)
 
-Uses the `openai` Python client pointed at the local llama-server (`LLAMA_SERVER_URL` env var, default `http://llama-server:8080/v1`). Responses are streamed and echoed to stdout token-by-token as they arrive. `call_llm` sets `max_tokens` (default 2048) and warns when a generation is truncated — without a cap a repetition loop runs until it exhausts the context and takes llama-server down with it.
+Uses the `openai` Python client pointed at the local llama-server (`LLAMA_SERVER_URL` env var, default `http://llama-server:8080/v1`). Responses are streamed and echoed token-by-token as they arrive — to stdout by default, or to whatever `textGenerateUtils.token_sink` is set to, which is how `pipeline.console_emit` labels each step. `call_llm` sets `max_tokens` (default 2048) and warns when a generation is truncated — without a cap a repetition loop runs until it exhausts the context and takes llama-server down with it.
 
 ### Key files
 
 | File | Purpose |
 |------|---------|
-| `src/monster-generator.ipynb` | Main orchestration notebook |
+| `src/pipeline.py` | One card, start to finish — where the generation itself lives |
+| `src/monster-generator.ipynb` | Notebook front end: preflight, the loop, the contact sheet |
 | `src/textGenerateUtils.py` | LLM calls: description, SD prompt, scientific name |
 | `src/imageGenerateUtils.py` | ComfyUI HTTP client + caption rendering |
 | `src/MonsterNameGenerator.py` | Markov chain name generator |
