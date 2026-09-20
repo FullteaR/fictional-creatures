@@ -1,7 +1,9 @@
 import os
 import base64
+import contextvars
 import random
 import re
+from contextlib import contextmanager
 from io import BytesIO
 from openai import OpenAI
 from sampleMonsters import *
@@ -10,6 +12,29 @@ LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://llama-server:8080/
 _client = OpenAI(base_url=LLAMA_SERVER_URL, api_key="dummy")
 _MODEL = "local-model"
 
+
+# 生成トークンの出し先。ノートブックからは stdout に流せばよいが、Web UI は
+# 同じトークンをブラウザへ転送したいので、差し替えられるようにしてある。
+# ContextVar なのでワーカースレッドごとに独立する。
+_token_sink = contextvars.ContextVar("token_sink", default=None)
+
+
+@contextmanager
+def token_sink(sink):
+    """このブロックの中で call_llm が吐くトークンを sink に渡す。抜ければ stdout に戻る"""
+    handle = _token_sink.set(sink)
+    try:
+        yield
+    finally:
+        _token_sink.reset(handle)
+
+
+def _emit(text):
+    sink = _token_sink.get()
+    if sink is None:
+        print(text, end="", flush=True)
+    else:
+        sink(text)
 
 
 def call_llm(messages, max_tokens=2048):
@@ -30,13 +55,13 @@ def call_llm(messages, max_tokens=2048):
         choice = chunk.choices[0]
         delta = choice.delta.content or ""
         if delta:
-            print(delta, end="", flush=True)
+            _emit(delta)
             chunks.append(delta)
         if choice.finish_reason:
             finish_reason = choice.finish_reason
-    print()
+    _emit("\n")
     if finish_reason == "length":
-        print(f"[warn] max_tokens={max_tokens} に到達して打ち切られました（繰り返しループの可能性）")
+        _emit(f"[warn] max_tokens={max_tokens} に到達して打ち切られました（繰り返しループの可能性）\n")
     return "".join(chunks)
 
 
@@ -79,6 +104,8 @@ def limb_count_phrases(prompt):
 # 構図は STYLE_PREFIX と同じ扱いで、LLM の出力にコード側から前置きする。
 # draws_creature=False の構図では本体を描かないので、付属肢の本数指定も外す。
 # counts_limbs=False は本体が写っても本数を数えられない構図（遠景）。数詞の指定は書かせない。
+# magnifies_body=True は本体が大きく写り、付属肢の本数が全部見えてしまう構図。
+# 本数が破綻しやすい種 (LIMB_HEAVY_SPECIES) には、pick_traits がこの構図を配らない。
 # shows_group=False は群れを収められない構図。本体が写らない「痕跡」と、
 # 体の一部しか写らない「拡大図」には、群れる生物でも群れを描かせない。
 # group_only=True は群れる生物専用の構図。構図の指定自体が群れを描写しているので、
@@ -89,28 +116,33 @@ COMPOSITIONS = [
     {"weight": 50, "label": "生物の全体図",
      "directive": "the whole creature centred in frame, entire body visible from head to tail, "
                   "side-on specimen view, habitat kept plain and secondary",
-     "draws_creature": True, "counts_limbs": True, "shows_group": True, "group_only": False,
+     "draws_creature": True, "counts_limbs": True, "magnifies_body": True,
+     "shows_group": True, "group_only": False,
      "negative": "cropped, out of frame, extreme close-up"},
     {"weight": 20, "label": "生息地の風景",
      "directive": "wide view of the habitat filling the frame, the creature small and partly "
                   "concealed within the scene, environment shown in full",
-     "draws_creature": True, "counts_limbs": True, "shows_group": True, "group_only": False,
+     "draws_creature": True, "counts_limbs": True, "magnifies_body": False,
+     "shows_group": True, "group_only": False,
      "negative": "extreme close-up, empty scenery"},
     {"weight": 15, "label": "生態の痕跡",
      "directive": "the creature itself absent from frame, no animal visible, only {trace} "
                   "left behind, shown in situ in the empty habitat",
-     "draws_creature": False, "counts_limbs": False, "shows_group": False, "group_only": False,
+     "draws_creature": False, "counts_limbs": False, "magnifies_body": False,
+     "shows_group": False, "group_only": False,
      "negative": "live animal, living creature, animal, eyes, face, moving limbs"},
     {"weight": 15, "label": "体の一部の拡大図",
      "directive": "close-up study of {part} filling the frame, the rest of the body out of "
                   "frame, habitat plain and out of focus behind",
-     "draws_creature": True, "counts_limbs": True, "shows_group": False, "group_only": False,
+     "draws_creature": True, "counts_limbs": True, "magnifies_body": True,
+     "shows_group": False, "group_only": False,
      "negative": "full body, whole creature, wide shot, distant view"},
     {"weight": 50, "label": "群れの遠景",
      "directive": "distant wide view of a dense swarm of the species massed across the habitat, "
                   "many small individuals scattered and clustered far from the viewer, each one "
                   "tiny and without visible detail, the habitat visible around and beyond them",
-     "draws_creature": True, "counts_limbs": False, "shows_group": True, "group_only": True,
+     "draws_creature": True, "counts_limbs": False, "magnifies_body": False,
+     "shows_group": True, "group_only": True,
      # 遠景は人物を呼び込む。silhouette という語もそうだが、説明文が交易や集落に触れると
      # 地平線に人型が並ぶので、この構図だけ人間をネガティブで落とす
      "negative": "close-up, macro, single specimen, large creature in foreground, portrait, "
@@ -130,6 +162,14 @@ PARTS = [
     "the head", "one limb", "the mouthparts",
     "the patterned surface of the body", "the sensory organs",
 ]
+# 甲殻類は脚10本に鋏脚と触角が加わり、プロンプトに数詞を書いても拡散モデルが描き分けられない。
+# 大写しにするほど破綻が目立つので、この種には本体が大きく写る構図を配らない。
+LIMB_HEAVY_SPECIES = ("甲殻類",)
+# その種に対する magnifies_body 構図の重みの倍率。0 で完全に排除、0.2 ならたまに出る程度に減る。
+# 全構図の重みが 0 になると random.choices が落ちるので、必ず引ける構図を残すこと。
+LIMB_HEAVY_WEIGHT = 0.0
+# 裏設定に書かせる付属肢の本数の上限。種別を問わず、脚14本と書かれた時点で図版は破綻する。
+MAX_LIMBS = 8
 DANGERS = [
     (25, "人間には全く無害"),
     (35, "刺激すると刺す、あるいは咬む程度"),
@@ -158,14 +198,22 @@ def _composition(row):
     return picked
 
 
-def pick_traits():
+def _composition_weight(row, species):
+    """種と構図の相性。本数が破綻しやすい種は、本体を大写しにする構図の重みを下げる"""
+    if row["magnifies_body"] and species in LIMB_HEAVY_SPECIES:
+        return row["weight"] * LIMB_HEAVY_WEIGHT
+    return row["weight"]
+
+
+def pick_traits(species=None):
     population = random.choices(POPULATIONS, weights=[p[0] for p in POPULATIONS])[0]
     # 群れ専用の構図は、群れる個体を引いたときだけ候補に入れる
     pool = [row for row in COMPOSITIONS if population[2] or not row["group_only"]]
+    weights = [_composition_weight(row, species) for row in pool]
     return {
         "danger": random.choices([d[1] for d in DANGERS], weights=[d[0] for d in DANGERS])[0],
         "population": {"label": population[1], "group": population[2]},
-        "composition": _composition(random.choices(pool, weights=[row["weight"] for row in pool])[0]),
+        "composition": _composition(random.choices(pool, weights=weights)[0]),
     }
 
 
@@ -229,7 +277,8 @@ def generate_profile(target, description, traits):
                 "体長 / 体色と質感 / 頭部 / 付属肢 / 特徴的な器官 / 食性 / 人間への危険度 / 個体数 / "
                 "行動と姿勢 / 生息環境の細部 の10項目を、この順番で1行ずつ、markdown等は使わずに書いてください。\n\n"
                 "付属肢の行には、脚・腕・触手・翼・ひれ・触角の本数を必ず算用数字で書き、片側何本かも添えてください。"
-                "「多数」「無数」のような曖昧な書き方はせず、無い付属肢は書かないでください。\n\n"
+                "「多数」「無数」のような曖昧な書き方はせず、無い付属肢は書かないでください。"
+                f"同じ種類の付属肢は多くても{MAX_LIMBS}本までとし、図版で数えて確かめられる本数に収めてください。\n\n"
                 f"人間への危険度は「{traits['danger']}」、個体数は「{traits['population']['label']}」として、"
                 "それに合う姿・行動にしてください。"
                 "上の説明文と矛盾しない範囲で、説明文には書かれていない見た目の細部を補ってください。"

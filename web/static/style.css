@@ -1,0 +1,81 @@
+/* 標本台帳の体裁。角は立て、影はぼかさず紙の厚みぶん真下にずらす。
+   欧文は EB Garamond、和文は Shippori Mincho に落ちる */
+
+:root {
+  --board: #d3d2c7;
+  --board-dim: #c3c2b5;
+  --sheet: #ebe9e0;
+  --ink: #1c221e;
+  --ink-soft: #586057;
+  --ink-faint: #8b9087;
+  --keyline: #9c9c8e;
+  --stamp: #2b4a6e;
+  --alarm: #7c2f25;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  display: grid; place-items: center;
+  min-height: 100vh; margin: 0; padding: 3rem 1rem 4rem;
+  background: var(--board); color: var(--ink);
+  font-family: "EB Garamond", "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 16px;
+  font-feature-settings: "palt" 1;
+}
+
+main { width: min(800px, 100%); text-align: center; }
+
+h1 {
+  margin: 0 0 2.5rem;
+  font-size: 1.05rem; font-weight: 400; letter-spacing: .42em;
+  color: var(--ink-soft); text-indent: .42em;
+}
+
+/* 画面で強いのはここだけ。あとは黙らせる */
+#go {
+  padding: .85rem 4.5rem;
+  border: 1px solid var(--ink); border-radius: 0;
+  background: var(--ink); color: var(--sheet);
+  font: inherit; font-size: 1.3rem; font-weight: 800; letter-spacing: .5em;
+  text-indent: .5em;
+  cursor: pointer;
+  transition: background .12s ease-out, color .12s ease-out;
+}
+#go:hover:not(:disabled) { background: var(--stamp); border-color: var(--stamp); }
+#go:disabled { background: transparent; color: var(--ink-faint); border-color: var(--keyline); cursor: progress; }
+#go:focus-visible { outline: 2px solid var(--stamp); outline-offset: 3px; }
+
+#note {
+  margin: 1.4rem 0 0; min-height: 1.5em;
+  color: var(--ink-faint); font-size: .88rem; letter-spacing: .08em;
+}
+#note.is-alarm { color: var(--alarm); overflow-wrap: anywhere; }
+#note b { font-weight: 400; font-variant-numeric: tabular-nums; }
+
+/* 台紙に貼った図版。ぼかした影ではなく、紙の厚みぶんずらした実線 */
+#plate {
+  margin: 2.75rem 0 0; padding: 12px;
+  border: 1px solid var(--keyline); background: var(--sheet);
+  box-shadow: 5px 5px 0 var(--board-dim);
+}
+#plate img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; background: var(--board-dim); }
+#plate.is-new { animation: settle .45s cubic-bezier(.2, .7, .3, 1); }
+
+@keyframes settle {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --board: #22261f; --board-dim: #171a14; --sheet: #2c3129;
+    --ink: #e2e0d2; --ink-soft: #a7a897; --ink-faint: #7b7d6e;
+    --keyline: #585e4e; --stamp: #8fb3d6; --alarm: #d98a7c;
+  }
+  #go { color: var(--board); }
+}
