@@ -1,8 +1,16 @@
 const go = document.getElementById("go");
 const note = document.getElementById("note");
-const plate = document.getElementById("plate");
-const img = document.getElementById("img");
+const book = document.getElementById("book");
+const keep = document.getElementById("keep");
+const save = document.getElementById("save");
+const pager = document.getElementById("pager");
+const back = document.getElementById("back");
+const forward = document.getElementById("forward");
+const count = document.getElementById("count");
 
+const pages = [];
+const shown = new Set();
+let at = -1;
 let startedAt = 0;
 let timer = null;
 
@@ -12,6 +20,39 @@ function clock() {
   note.innerHTML = "探索中 <b></b>";
   note.querySelector("b").textContent =
     `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function turn(index, direction) {
+  if (index < 0 || index >= pages.length || index === at) return;
+  if (at >= 0) pages[at].hidden = true;
+  at = index;
+  const page = pages[at];
+  page.hidden = false;
+  page.className = "plate";
+  void page.offsetWidth;
+  page.classList.add(direction);
+  save.href = `/api/image/${encodeURIComponent(page.dataset.image)}`;
+  save.download = page.dataset.image;
+  keep.hidden = false;
+  count.textContent = `${at + 1} / ${pages.length}`;
+  back.disabled = at === 0;
+  forward.disabled = at === pages.length - 1;
+  pager.hidden = pages.length < 2;
+}
+
+function place(image) {
+  shown.add(image);
+  const page = document.createElement("figure");
+  page.className = "plate";
+  page.hidden = true;
+  page.dataset.image = image;
+  const plate = document.createElement("img");
+  plate.src = `/api/image/${encodeURIComponent(image)}`;
+  plate.alt = "観察された図版";
+  page.append(plate);
+  book.append(page);
+  pages.push(page);
+  turn(pages.length - 1, "turns-forward");
 }
 
 function show(state) {
@@ -34,16 +75,7 @@ function show(state) {
     note.className = "";
     note.textContent = "";
   }
-  if (state.image) {
-    const url = `/api/image/${encodeURIComponent(state.image)}`;
-    if (img.getAttribute("src") !== url) {
-      img.src = url;
-      plate.hidden = false;
-      plate.classList.remove("is-new");
-      void plate.offsetWidth;
-      plate.classList.add("is-new");
-    }
-  }
+  if (state.image && !shown.has(state.image)) place(state.image);
 }
 
 async function poll() {
@@ -65,6 +97,13 @@ go.addEventListener("click", async () => {
     note.textContent = detail.detail || "探索を始められませんでした。";
   }
   poll();
+});
+
+back.addEventListener("click", () => turn(at - 1, "turns-back"));
+forward.addEventListener("click", () => turn(at + 1, "turns-forward"));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") turn(at - 1, "turns-back");
+  if (event.key === "ArrowRight") turn(at + 1, "turns-forward");
 });
 
 poll();

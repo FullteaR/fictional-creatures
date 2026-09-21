@@ -14,6 +14,7 @@
 
 body {
   display: grid; place-items: center;
+  overflow-x: hidden;
   min-height: 100vh; margin: 0; padding: 3rem 1rem 4rem;
   background: var(--board); color: var(--ink);
   font-family: "EB Garamond", "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
@@ -49,16 +50,66 @@ h1 {
 #note.is-alarm { color: var(--alarm); overflow-wrap: anywhere; }
 #note b { font-weight: 400; font-variant-numeric: tabular-nums; }
 
-#plate {
-  margin: 2.75rem 0 0; padding: 12px;
+#book { margin: 2.75rem 0 0; }
+#book:empty { margin: 0; }
+
+.plate {
+  margin: 0; padding: 12px;
   border: 1px solid var(--keyline); background: var(--sheet);
   box-shadow: 5px 5px 0 var(--board-dim);
 }
-#plate img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; background: var(--board-dim); }
-#plate.is-new { animation: settle .45s cubic-bezier(.2, .7, .3, 1); }
+.plate img { display: block; width: 100%; aspect-ratio: 5 / 3; object-fit: cover; background: var(--board-dim); }
+.plate.turns-forward { animation: turn-forward .38s cubic-bezier(.2, .7, .3, 1); }
+.plate.turns-back { animation: turn-back .38s cubic-bezier(.2, .7, .3, 1); }
 
-@keyframes settle {
-  from { opacity: 0; transform: translateY(-6px); }
+#keep { margin: 1.1rem .1rem 0; text-align: right; }
+#keep a {
+  display: inline-block; padding: .38rem 1.2rem;
+  border: 1px solid var(--keyline);
+  color: var(--ink-soft); text-decoration: none;
+  font-size: .82rem; letter-spacing: .22em; text-indent: .22em;
+  transition: color .12s ease-out, border-color .12s ease-out;
+}
+#keep a:hover { color: var(--stamp); border-color: var(--stamp); }
+#keep a:focus-visible { outline: 2px solid var(--stamp); outline-offset: 3px; }
+
+#pager {
+  display: flex; align-items: center; justify-content: center; gap: 1.6rem;
+  margin: 1.4rem 0 0;
+}
+#pager button {
+  width: 2.4rem; padding: .1rem 0;
+  border: 1px solid var(--keyline); border-radius: 0;
+  background: transparent; color: var(--ink-soft);
+  font: inherit; font-size: 1.3rem; line-height: 1.4;
+  cursor: pointer;
+  transition: color .12s ease-out, border-color .12s ease-out;
+}
+#pager button:hover:not(:disabled) { color: var(--stamp); border-color: var(--stamp); }
+#pager button:disabled { color: var(--keyline); border-color: var(--board-dim); cursor: default; }
+#pager button:focus-visible { outline: 2px solid var(--stamp); outline-offset: 3px; }
+#count {
+  min-width: 4.5em;
+  color: var(--ink-faint); font-size: .82rem; letter-spacing: .16em;
+  font-variant-numeric: tabular-nums;
+}
+
+footer { margin: 3.5rem 0 0; }
+footer a {
+  color: var(--ink-faint); opacity: .45; text-decoration: none;
+  font-size: .68rem; letter-spacing: .14em;
+  transition: opacity .12s ease-out, color .12s ease-out;
+}
+footer a:hover { opacity: 1; color: var(--stamp); }
+footer a:focus-visible { opacity: 1; outline: 1px solid var(--stamp); outline-offset: 4px; }
+
+@keyframes turn-forward {
+  from { opacity: .15; transform: translateX(26px) rotate(.5deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes turn-back {
+  from { opacity: .15; transform: translateX(-26px) rotate(-.5deg); }
   to { opacity: 1; transform: none; }
 }
 

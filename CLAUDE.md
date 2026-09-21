@@ -220,9 +220,10 @@ Those three carry a number through the pipeline faithfully, which is not the sam
 
 ### Web UI (`web/`)
 
-`webui` is one button. Pressing it runs `pipeline.generate_card()` and shows the card that comes
-out; there is nothing else on the page. Like `app` it holds no models of its own and only talks to
-`llama-server` and `comfyui` over HTTP.
+`webui` is one button and the card it turns up. Pressing it runs `pipeline.generate_card()` and
+the card that comes out becomes the page you are on; the ones before it are turned back to with
+‹ and ›, and there is nothing else on the page. Like `app` it holds no models of its own and only
+talks to `llama-server` and `comfyui` over HTTP.
 
 `web/server.py` is four routes and a dict:
 
@@ -244,8 +245,26 @@ Everything about a card is in the PNG itself (see *Generation pipeline*), so the
 this side to store: no database, no sidecar files, and no state that outlives the process beyond
 `src/endemic/`.
 
+That includes the run's earlier cards. Each one the poll hands back is appended to the book as a
+`figure` and every page but the current one is `hidden`, so turning back is the `hidden` attribute
+moving and the browser never refetches a plate it has already drawn. The book lives in the browser
+alone: nothing is added to `_state`, and a reload starts a fresh one from the single card
+`/api/status` reports. Nothing lists `src/endemic/` either — serving the directory would make this
+a collection browser, with paging and thumbnails to match, and the collection is already on disk
+for whatever wants to read it.
+
+The pager appears on the second card and disables at each end rather than wrapping, ← and → turn
+the page too, and a turn animates from the side it came from (`turn-back` / `turn-forward`), which
+is the whole of the page-turning. It moves the sheet 26px, so `body` is `overflow-x: hidden` to
+keep that from showing a scrollbar for a third of a second.
+
 The page is `web/static/` — plain HTML/CSS/JS, no build step, mounted rather than baked into the
-image so an edit needs only `docker compose restart webui`.
+image so an edit needs only `docker compose restart webui`. The page being shown is saved from a
+button under the plate's right corner, drawn like the pager's — `<a download>` pointed at the same
+`/api/image/` the plate itself came from and named after the card, so nothing was added to the
+server for it. The repository is linked from a colophon line at the foot of the page, set the size
+and weight such a line is usually set, which is a good deal quieter than the button: the two are
+the only text on the page that is not the card, and only one of them is there to be pressed.
 
 ### Breaking the caption into lines
 

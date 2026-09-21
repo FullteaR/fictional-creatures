@@ -14,7 +14,16 @@
   <h1>架空固有種 観察記録</h1>
   <button id="go" type="button">探しに行く</button>
   <p id="note"></p>
-  <figure id="plate" hidden><img id="img" alt="観察された図版"></figure>
+  <div id="book"></div>
+  <p id="keep" hidden><a id="save" href="" download>↓ 図版を保存</a></p>
+  <nav id="pager" hidden>
+    <button id="back" type="button" aria-label="前の記録">‹</button>
+    <span id="count"></span>
+    <button id="forward" type="button" aria-label="次の記録">›</button>
+  </nav>
+  <footer>
+    <a href="https://github.com/FullteaR/fictional-creatures" target="_blank" rel="noopener">github.com/FullteaR/fictional-creatures</a>
+  </footer>
 </main>
 <script src="/static/app.js"></script>
 </body>
