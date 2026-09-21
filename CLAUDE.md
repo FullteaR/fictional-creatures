@@ -326,12 +326,20 @@ Uses the `openai` Python client pointed at the local llama-server (`LLAMA_SERVER
 
 ### Tests
 
-`src/tests/` is 93 pytest tests over the pure functions, and it runs in about four seconds without
-the GPU, the LLM or ComfyUI:
+`src/tests/` is 97 pytest tests over the pure functions, `web/tests/` is 10 more over the server's
+routes and 13 over the page itself, and all of it runs in about five seconds without the GPU, the
+LLM or ComfyUI:
 
 ```bash
-docker compose exec app python -m pytest /mnt/tests -q
+docker compose exec app python -m pytest /mnt/tests -q    # 97, the pipeline's own
+python -m pytest src/tests web/tests -q                   # 107, the routes as well
+npm install --prefix web && npm test --prefix web         # 13, the page
 ```
+
+The first line is the one that works out of the box, and it is also the only one that does: `app`
+mounts `./src` alone, so `web/tests` is invisible to it and `fastapi` is not installed there, while
+`webui` has `./web` but neither `pytest` nor `httpx`. Rather than widen either image for tests that
+need no GPU at all, the other two lines are what CI runs — see *Continuous integration* below.
 
 They cover the four places where behaviour is decided in code rather than by a model, which is
 exactly where a regression is invisible: where a line may break (`test_linebreak.py`), what a
@@ -352,6 +360,43 @@ and the tail rule caught it. Each guard now has a case that trips **it and nothi
 by measuring the distance, the shortening, the tail and the kanji of every case. Twenty-six
 mutations — one per rule, each deleting or loosening it in the source — are all caught. Two of those rules exist because the tests were written: nothing stopped a unit from changing under an unchanged numeral, and `_proof_forbidden` raised on traits it had been given a default for before the refactor.
 
+The two web suites were written the same way, and the same thing happened again on the first pass.
+`test_a_name_carrying_a_separator_is_refused` passed with `_IMAGE_NAME.match` deleted outright,
+because a `%2F` in the path never reaches the handler — Starlette's `{image}` does not match across
+a `/`, so the router refuses it first and the guard was never asked. The test now calls the route
+function directly with `../outside.png`, which is the only way to put a separator in front of it.
+Nineteen mutations are caught between the two: seven in `web/server.py` (the name pattern, the
+`.png` suffix, the resolved-path check, the single-flight flag, the reset on a new press, the error
+report, the clearing of `running`) and twelve in the page (the stamp strip, the download name, the
+place-once `Set`, the pager's second-card rule, the disabled ends, the bounds check in `turn`, the
+controls appearing, the new card becoming the current page, the turn class, the arrow keys, the
+`hidden` in the markup and the `!important` in the stylesheet).
+
+**The page is tested through jsdom, not through a browser.** `web/tests/page.test.mjs` loads the
+real `index.html`, evaluates the real `app.js` against a stubbed `fetch`, and then drives it only
+the way the poll does — `await poll({image})` — so the tests never reach inside the script. That is
+enough for everything the book decides: what is hidden before the first card, that a second card
+turns forward and brings the pager, that turning back restores the earlier plate and its save link,
+that the ends are dead, that the arrow keys work, and that a poll returning the same card over and
+over does not drag a reader who has turned back to the newest page. What jsdom will **not** do is
+lay the page out or resolve the cascade: `getComputedStyle` reports `display: grid` for a
+`#controls` that carries `hidden`, which is precisely the bug that shipped, so that rule is checked
+against the stylesheet's text instead and the sizing arithmetic under *The page is meant to be seen
+at once* is checked by nobody. A real browser under Playwright is the only thing that would, and it
+would cost more to install than everything else in this file put together.
+
+### Continuous integration
+
+`.github/workflows/tests.yml` runs on every push and every pull request, in two jobs: one installs
+Python 3.12 and runs `src/tests` and `web/tests`, the other installs Node 22 and `jsdom` and runs
+the page tests. Between them they are the only thing that runs the web tests at all, for the reason
+above. Nothing in either job wants a GPU, a model file or a network call beyond its own installs,
+so a run is about a minute and says nothing about whether a card actually generates — that is still
+something only a real stack can answer.
+
+`web/package.json` exists for `jsdom` and nothing else. The page itself still has no build step and
+no dependencies; `web/node_modules` is gitignored and only a test run creates it.
+
 
 ### Key files
 
@@ -360,6 +405,8 @@ mutations — one per rule, each deleting or loosening it in the source — are 
 | `src/pipeline.py` | One card, start to finish — the shared entry point for both front ends |
 | `src/monster-generator.ipynb` | Notebook front end: preflight, the loop, the contact sheet |
 | `src/tests/` | Unit tests for everything decided in code — see *Tests* above |
+| `web/tests/` | The four routes (pytest) and the page itself (node + jsdom) |
+| `.github/workflows/tests.yml` | The only place the web tests actually run — see *Continuous integration* |
 | `web/server.py` | The button: start one card, report status, serve the PNG |
 | `web/static/` | The page itself (no build step) |
 | `src/textGenerateUtils.py` | LLM calls: description, profile, SD prompt, scientific name, the review of the draft plate, the proofread of the description against the finished one, the polish of its Japanese |

@@ -8,6 +8,8 @@ src/smoke_test_comfyui.png
 models/*
 !models/.gitkeep
 web/__pycache__
+web/node_modules
+web/tests/__pycache__
 src/tests/__pycache__
 src/tests/.pytest_cache
 .pytest_cache
