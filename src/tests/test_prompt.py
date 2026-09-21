@@ -121,6 +121,21 @@ def test_the_profile_call_caps_the_limbs_at_the_plans_own_limit(sent):
     assert "多くても4本" in last(sent)
 
 
+def test_no_description_sample_writes_a_measurement_in_kanji():
+    import re
+
+    kanji_measure = re.compile(
+        r"[一二三四五六七八九十百千]+(?:ミリ|センチ|メートル|キロ|グラム|リットル|例|年代)")
+    for register in t.REGISTERS:
+        for _, text in register["samples"]:
+            assert not kanji_measure.search(text)
+
+
+def test_the_description_call_asks_for_arabic_numerals(sent):
+    t.generate_description("洞窟の生物", traits())
+    assert "算用数字" in last(sent)
+
+
 def test_the_description_call_is_given_the_body_plan_in_every_sample(sent):
     picked = traits()
     t.generate_description("洞窟の生物", picked)
