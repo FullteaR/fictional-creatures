@@ -3,6 +3,8 @@ import base64
 import contextvars
 import random
 import re
+
+import Levenshtein
 from contextlib import contextmanager
 from io import BytesIO
 from openai import OpenAI
@@ -1007,27 +1009,32 @@ def _revised_sentence(text, original, forbidden):
     return "" if text == original else text
 
 
-def _parse_proof(text, sentences, forbidden):
+def _spliced(sentences, revised):
+    return [{"span": match.span(), "sentence": match.group().strip(),
+             "ok": index not in revised, "text": revised.get(index, "")}
+            for index, match in enumerate(sentences)]
+
+
+def _parse_revisions(text, sentences, revise, first):
     revised, shifted = {}, False
     for line in text.splitlines():
         match = _REVIEW_LINE.match(line)
         if not match:
             continue
         index = int(match.group(1)) - 1
-        if 0 < index < len(sentences) and match.group(2).upper() == "NG":
-            fixed = _revised_sentence(match.group(3), sentences[index].group().strip(),
-                                      forbidden)
+        if first <= index < len(sentences) and match.group(2).upper() == "NG":
+            fixed = revise(match.group(3), sentences[index].group().strip())
             shifted = shifted or any(fixed == other.group().strip() for other in sentences)
             if fixed:
                 revised[index] = fixed
-    if shifted or len(revised) > 1:
-        revised = {}
-    review = []
-    for index, match in enumerate(sentences):
-        fixed = revised.get(index, "")
-        review.append({"span": match.span(), "sentence": match.group().strip(),
-                       "ok": not fixed, "text": fixed})
-    return review
+    return revised, shifted
+
+
+def _parse_proof(text, sentences, forbidden):
+    revised, shifted = _parse_revisions(
+        text, sentences,
+        lambda fixed, original: _revised_sentence(fixed, original, forbidden), 1)
+    return _spliced(sentences, {} if shifted or len(revised) > 1 else revised)
 
 
 def _proof_forbidden(species, field, traits):
@@ -1099,6 +1106,82 @@ def apply_proof(description, review):
         start, end = entry["span"]
         description = description[:start] + entry["text"] + description[end:]
     return description
+
+
+POLISH_MAX_TOKENS = 1024
+POLISH_MAX_EDITS = 2
+_NUMERALS = re.compile(r"[0-9０-９一二三四五六七八九十百千万]+")
+_KANJI = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _polish_forbidden(description, name, species, field, traits):
+    forbidden = _proof_forbidden(species, field, traits)
+    return {"keep": forbidden["keep"] + (name,), "hidden": forbidden["hidden"],
+            "source": description}
+
+
+def _natural_sentence(text, original, forbidden):
+    text = " ".join(text.split()).strip().strip("「」『』\"'")
+    if not text:
+        return ""
+    if not text.endswith("。"):
+        text += "。"
+    if Levenshtein.distance(text, original) > max(6, len(original) // 3):
+        return ""
+    if len(original) - len(text) > 6:
+        return ""
+    if len(original) - len(os.path.commonprefix([original, text])) <= 6:
+        return ""
+    if set(_KANJI.findall(text)) - set(_KANJI.findall(forbidden["source"])):
+        return ""
+    if _NUMERALS.findall(text) != _NUMERALS.findall(original):
+        return ""
+    if any(word and word in original and word not in text for word in forbidden["keep"]):
+        return ""
+    if any(word and word in text for word in forbidden["hidden"]):
+        return ""
+    return "" if text == original else text
+
+
+def polish_description(description, name="", species="", field="", traits=None):
+    sentences = _sentences(description)
+    forbidden = _polish_forbidden(description, name, species, field, traits)
+    numbered = "\n".join(f"{index + 1}. {match.group().strip()}"
+                          for index, match in enumerate(sentences))
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "図鑑に載せる解説文を1文ずつ並べます。"
+                "日本語として不自然なところだけを直してください。\n\n"
+                f"{numbered}\n\n"
+                "直すのは次のような場合だけです:\n"
+                "・助詞が誤っている、主語と述語がねじれている、係り受けが通っていない\n"
+                "・動詞の活用や自動詞・他動詞の使い方が誤っている\n"
+                "・語の組み合わせが日本語として意味を成していない\n\n"
+                "次は誤りではありません。OK としてください:\n"
+                "・文末が「する」か「している」か、助詞が「に」か「へ」かといった書き分け\n"
+                "・一文目の「——する生物。」のような体言止め\n"
+                "・硬い言い回し、まわりくどい言い回し、説明の順序\n\n"
+                "次のものは直さないでください:\n"
+                "・書かれている内容。事実・数値・生物の名前・生息地や分類の呼び名は変えないでください。\n"
+                f"・文体と語調。{_register_of(traits)['instruction']}\n"
+                "・文の数。1文を2文に分けたり、2文をまとめたりしないでください。\n"
+                "・言い回しの好み。読んで意味が通る文は、硬くても回りくどくても OK としてください。\n\n"
+                f"・1行に1文、1から{len(sentences)}まで順に、"
+                "「番号: OK」または「番号: NG 直した文」の形式で書いてください。\n"
+                "・直す文は、元の文の語をできるだけ残したまま、"
+                "おかしい箇所だけを最小限に書き換えた1文を書いてください。\n"
+                "・ほとんどの文は OK のはずです。\n"
+                "・判定の行以外は何も書かないでください。"
+            ),
+        }
+    ]
+    text = call_llm(messages, max_tokens=POLISH_MAX_TOKENS)
+    revised, shifted = _parse_revisions(
+        text, sentences,
+        lambda fixed, original: _natural_sentence(fixed, original, forbidden), 1)
+    return _spliced(sentences, {} if shifted or len(revised) > POLISH_MAX_EDITS else revised)
 
 
 def _description_request(target, ja, register, opener=""):

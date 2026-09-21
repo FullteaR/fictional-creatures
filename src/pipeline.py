@@ -15,8 +15,8 @@ from MonsterNameGenerator import MarkovMonsterNameGenerator
 from imageGenerateUtils import add_caption, get_image
 from textGenerateUtils import (apply_proof, apply_review, draws_solo, extra_negative,
                                generate_description, generate_profile, generate_prompt,
-                               generate_scientific_name, pick_traits, review_description,
-                               review_image, review_payload, token_sink)
+                               generate_scientific_name, pick_traits, polish_description,
+                               review_description, review_image, review_payload, token_sink)
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.environ.get("ENDEMIC_OUT_DIR", os.path.join(SRC_DIR, "endemic"))
@@ -65,6 +65,7 @@ STEPS = [
     ("review", "照合"),
     ("final", "清書"),
     ("proof", "校正"),
+    ("polish", "推敲"),
     ("caption", "組版"),
 ]
 
@@ -217,6 +218,10 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
     proof = run("proof", lambda: review_description(
         background, description, target, species, field, traits))
     draft_description, description = description, apply_proof(description, proof)
+
+    polish = run("polish", lambda: polish_description(
+        description, name, species, field, traits))
+    proofed_description, description = description, apply_proof(description, polish)
     if description != draft_description:
         field_done("description", description)
 
@@ -233,6 +238,7 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
         "scientific_name": scientific_name,
         "description": description,
         "draft_description": draft_description,
+        "proofed_description": proofed_description,
         "field": field,
         "species": species,
         "target": target,
