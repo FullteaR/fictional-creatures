@@ -215,36 +215,70 @@ def drawItalicText(layer, xy, text, upright_font, italic_font, fill):
     return xy[0] + box[2] + slant // 2
 
 
+HEAD_FORBIDDEN = "、。，．・：；？！?!）」』】〉》〕｝ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヵヶ゛゜～"
+TAIL_FORBIDDEN = "（「『【〈《〔｛"
+WORD_HEADS = ("名詞", "動詞", "形容詞", "副詞", "連体詞", "接続詞", "感動詞", "接頭詞")
+WORD_TAILS = ("接尾", "非自立")
+
+_tokenizer = None
+
+
+def tokenizer():
+    global _tokenizer
+    if _tokenizer is None:
+        _tokenizer = Tokenizer()
+    return _tokenizer
+
+
+def _starts_word(kind, detail, previous):
+    previous_kind, previous_detail = previous
+    if detail == "括弧開":
+        return True
+    if kind not in WORD_HEADS or detail in WORD_TAILS:
+        return False
+    if kind == "名詞" and previous_kind in ("名詞", "接頭詞"):
+        return False
+    if kind == "動詞" and previous_detail == "サ変接続":
+        return False
+    return not (kind == "動詞" and previous_kind == "動詞")
+
+
+def getWords(text):
+    words, previous = [], ("", "")
+    for token in tokenizer().tokenize(text):
+        kind, detail = (token.part_of_speech.split(",") + [""])[:2]
+        if words and not _starts_word(kind, detail, previous):
+            words[-1] += token.surface
+        else:
+            words.append(token.surface)
+        previous = (kind, detail)
+    return words
+
+
+def _fitting(word, font, max_width):
+    cut = len(word)
+    while cut > 1 and getTextWidth(word[:cut], font) > max_width:
+        cut -= 1
+    while cut < len(word) and word[cut] in HEAD_FORBIDDEN:
+        cut += 1
+    while cut > 1 and word[cut - 1] in TAIL_FORBIDDEN:
+        cut -= 1
+    return word[:cut], word[cut:]
+
+
 def getLineBreak(text, font, max_width):
-    jp_tokenizer = Tokenizer()
-    tokens = list(jp_tokenizer.tokenize(text))
-
-    chunks = []
-    chunk = ""
-    for i, token in enumerate(tokens):
-        word = token.surface
-        part_of_speech = token.part_of_speech.split(',')[0]
-        if part_of_speech == "名詞":
-            if chunk:
-                chunks.append(chunk)
-            chunk = word
-        else:
-            chunk += word
-    if chunk:
-        chunks.append(chunk)
-
-    lines = []
-    line = ""
-    for chunk in chunks:
-        test_line = line+chunk
-        if getTextWidth(test_line, font) <= max_width:
-            line = test_line
-        else:
-            lines.append(line)
-            line = chunk
-    if line:
-        lines.append(line)
-    return lines
+    lines = [""]
+    for word in getWords(text):
+        while word:
+            if getTextWidth(lines[-1] + word, font) <= max_width:
+                lines[-1] += word
+                word = ""
+            elif lines[-1]:
+                lines.append("")
+            else:
+                lines[-1], word = _fitting(word, font, max_width)
+                lines.append("")
+    return [line for line in lines if line]
 
 
 def add_caption(name, description, scientific_name, image, title_font, paragraph_font, scientific_font,
