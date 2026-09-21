@@ -195,7 +195,7 @@ What it is allowed to change is decided in code, because the model asked to "mak
 - **The opening sentence is never rewritten**, the same rule as the plate proofread and for the same reason — the noun-stop is the house style, so 「生物である。」 is a restyle wearing a correction's clothes.
 - **No kanji may appear that is not already somewhere in the description.** A grammar fix is almost entirely kana work — 張り付き→張り付いて, 報告され→報告されており, 体表は→体表から — while new content arrives as new kanji, which is how 食べている and 考えられる were caught. It costs the occasional real fix: 色素班→色素斑 is a genuine typo the rule throws away.
 - **An edit that only reaches the last six characters is dropped.** Nearly all the noise was sentence-final aspect (摂取する→摂取している, 暗褐色をしている→暗褐色である) — not errors, just the model's preference, and rejecting the tail removed twelve of them at the cost of the rare 主述 fix that lives there.
-- **The sentence may not lose more than six characters**, which is what stopped a clause of body plan being deleted, and the numerals in it have to survive character for character so 五ミリ cannot become 五センチ.
+- **The sentence may not lose more than six characters**, which is what stopped a clause of body plan being deleted, and the numerals in it have to survive character for character, together with the katakana unit behind them, so 五ミリ cannot become 五センチ — the numeral alone was not enough, since only the unit changes in that pair.
 
 At most two sentences are corrected per card (`POLISH_MAX_EDITS`); more than that is a rewrite, and the round is voided whole, as in the other two passes. A replacement identical to the original is dropped, which is also what catches the pass echoing back the plate proofread's own correction.
 
@@ -305,8 +305,8 @@ deleting its head filter changed nothing; and the apply_review test used a fix p
 already at the head of the prompt, so promoting it again was a no-op. The polish guards were worse
 — removing the new-kanji rule broke nothing, because 生きている→食べている is also a tail-only edit
 and the tail rule caught it. Each guard now has a case that trips **it and nothing else**, checked
-by measuring the distance, the shortening, the tail and the kanji of every case. Twenty-four
-mutations — one per rule, each deleting or loosening it in the source — are all caught.
+by measuring the distance, the shortening, the tail and the kanji of every case. Twenty-six
+mutations — one per rule, each deleting or loosening it in the source — are all caught. Two of those rules exist because the tests were written: nothing stopped a unit from changing under an unchanged numeral, and `_proof_forbidden` raised on traits it had been given a default for before the refactor.
 
 
 ### Key files

@@ -58,6 +58,15 @@ def test_changing_a_numeral_is_refused():
     assert not polished("体長は五ミリ前後である。", "体長は十ミリ前後である。")
 
 
+def test_changing_the_unit_after_a_numeral_is_refused():
+    assert not polished("体長は五ミリ前後である。", "体長は五センチ前後である。")
+    assert not polished("体長は五ミリ前後である。", "体長は五メートル前後である。")
+
+
+def test_the_forbidden_words_do_not_need_filled_traits():
+    assert t._proof_forbidden("生物", "洞窟", None)["keep"] == ("生物", "洞窟")
+
+
 def test_losing_the_habitat_word_is_refused():
     assert not polished("洞窟に生息する生物。", "中に生息する生物。")
 

@@ -1013,6 +1013,7 @@ def _sentence_pass(text, sentences, revise, forbidden, max_edits):
 
 
 def _proof_forbidden(species, field, traits):
+    traits = filled(traits)
     plan = traits["body_plan"]
     return {"keep": (species, field),
             "hidden": (traits["population"]["label"], traits.get("danger", ""),
@@ -1085,7 +1086,7 @@ def apply_proof(description, review):
 
 POLISH_MAX_TOKENS = 1024
 POLISH_MAX_EDITS = 2
-_NUMERALS = re.compile(r"[0-9０-９一二三四五六七八九十百千万]+")
+_NUMERALS = re.compile(r"[0-9０-９一二三四五六七八九十百千万]+[ァ-ヴー]*")
 _KANJI = re.compile(r"[\u4e00-\u9fff]")
 
 
