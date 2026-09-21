@@ -408,16 +408,16 @@ _lookless = {kind for kind in DEFAULT_KINDS for rows in (PALETTES, SURFACES)
 assert not _lookless, f"PALETTES/SURFACES に候補の無い kind があります: {_lookless}"
 
 DANGERS = [
-    (25, "人間には全く無害"),
-    (35, "刺激すると刺す、あるいは咬む程度"),
-    (25, "毒を持ち、接触すると危険"),
-    (15, "致死的で、接近そのものが極めて危険"),
+    {"weight": 25, "label": "人間には全く無害"},
+    {"weight": 35, "label": "刺激すると刺す、あるいは咬む程度"},
+    {"weight": 25, "label": "毒を持ち、接触すると危険"},
+    {"weight": 15, "label": "致死的で、接近そのものが極めて危険"},
 ]
 POPULATIONS = [
-    (20, "大量発生しており、生息地では群れに出くわす", True),
-    (30, "生息地では普通に見られる", False),
-    (30, "限られた場所にのみ局所的に生息する", False),
-    (20, "記録が数例しかない希少種", False),
+    {"weight": 20, "label": "大量発生しており、生息地では群れに出くわす", "group": True},
+    {"weight": 30, "label": "生息地では普通に見られる", "group": False},
+    {"weight": 30, "label": "限られた場所にのみ局所的に生息する", "group": False},
+    {"weight": 20, "label": "記録が数例しかない希少種", "group": False},
 ]
 GROUP_DIRECTIVE = ("many individuals of the same species together in the scene, "
                    "one specimen in the foreground shown clearly and in full, "
@@ -466,16 +466,18 @@ def _composition(row, plan):
     return picked
 
 
-def _pick(rows, weights):
+def _roll(rows, fits=None, weight=lambda row: row["weight"]):
+    pool = rows
+    if fits:
+        pool = [row for row in rows if fits(row)] or rows
+    weights = [weight(row) for row in pool]
     if sum(weights) <= 0:
-        return random.choice(rows)
-    return random.choices(rows, weights=weights)[0]
+        return random.choice(pool)
+    return random.choices(pool, weights=weights)[0]
 
 
-def _body_plan(species=None):
-    kinds = SPECIES_KINDS.get(species, DEFAULT_KINDS)
-    pool = [row for row in BODY_PLANS if row["kind"] in kinds] or BODY_PLANS
-    return random.choices(pool, weights=[row["weight"] for row in pool])[0]
+def _for_kind(rows, kind):
+    return [row for row in rows if not row["kinds"] or kind in row["kinds"]]
 
 
 def _composition_weight(row, species, body_plan):
@@ -484,105 +486,78 @@ def _composition_weight(row, species, body_plan):
     return row["weight"]
 
 
-def _size(species=None):
-    labels = SPECIES_SIZES.get(species)
-    pool = [row for row in SIZES if not labels or row["label"] in labels]
-    return _pick(pool, [row["weight"] for row in pool])
-
-
 def _palette_fits(row, composition):
     wanted = composition["palette"]
     return not ((wanted == "drab" and row["conspicuous"])
                 or (wanted == "light" and row["dark"]))
 
 
-def _look(rows, kind, fits=lambda row: True):
-    pool = [row for row in rows if not row["kinds"] or kind in row["kinds"]]
-    pool = [row for row in pool if fits(row)] or pool
-    return _pick(pool, [row["weight"] for row in pool])
-
-
 def pick_traits(species=None):
-    population = random.choices(POPULATIONS, weights=[p[0] for p in POPULATIONS])[0]
-    body_plan = _body_plan(species)
-    pool = [row for row in COMPOSITIONS if population[2] or not row["group_only"]]
-    weights = [_composition_weight(row, species, body_plan) for row in pool]
-    composition = _composition(_pick(pool, weights), body_plan)
+    kinds = SPECIES_KINDS.get(species, DEFAULT_KINDS)
+    labels = SPECIES_SIZES.get(species)
+    population = _roll(POPULATIONS)
+    body_plan = _roll(BODY_PLANS, lambda row: row["kind"] in kinds)
+    composition = _composition(
+        _roll(COMPOSITIONS,
+              lambda row: population["group"] or not row["group_only"],
+              lambda row: _composition_weight(row, species, body_plan)),
+        body_plan)
     return {
-        "danger": random.choices([d[1] for d in DANGERS], weights=[d[0] for d in DANGERS])[0],
-        "population": {"label": population[1], "group": population[2]},
+        "danger": _roll(DANGERS)["label"],
+        "population": population,
         "body_plan": body_plan,
-        "size": _size(species),
-        "palette": _look(PALETTES, body_plan["kind"],
+        "size": _roll(SIZES, lambda row: not labels or row["label"] in labels),
+        "palette": _roll(_for_kind(PALETTES, body_plan["kind"]),
                          lambda row: _palette_fits(row, composition)),
-        "surface": _look(SURFACES, body_plan["kind"]),
-        "register": _pick(REGISTERS, [r["weight"] for r in REGISTERS]),
+        "surface": _roll(_for_kind(SURFACES, body_plan["kind"])),
+        "register": _roll(REGISTERS),
         "composition": composition,
     }
 
 
-def _composition_of(traits):
-    if traits and traits.get("composition"):
-        return traits["composition"]
-    return _composition(COMPOSITIONS[0], BODY_PLANS[0])
+_DEFAULT_TRAITS = {
+    "composition": lambda: _composition(COMPOSITIONS[0], BODY_PLANS[0]),
+    "body_plan": lambda: BODY_PLANS[0],
+    "size": lambda: SIZES[2],
+    "palette": lambda: PALETTES[0],
+    "surface": lambda: SURFACES[0],
+    "register": lambda: REGISTERS[0],
+    "population": lambda: POPULATIONS[1],
+}
 
 
-def _body_plan_of(traits):
-    if traits and traits.get("body_plan"):
-        return traits["body_plan"]
-    return BODY_PLANS[0]
-
-
-def _size_of(traits):
-    if traits and traits.get("size"):
-        return traits["size"]
-    return SIZES[2]
-
-
-def _palette_of(traits):
-    if traits and traits.get("palette"):
-        return traits["palette"]
-    return PALETTES[0]
-
-
-def _surface_of(traits):
-    if traits and traits.get("surface"):
-        return traits["surface"]
-    return SURFACES[0]
-
-
-def _register_of(traits):
-    if traits and traits.get("register"):
-        return traits["register"]
-    return REGISTERS[0]
-
-
-def _population_of(traits):
-    if traits and traits.get("population"):
-        return traits["population"]
-    return {"label": POPULATIONS[1][1], "group": POPULATIONS[1][2]}
+def filled(traits):
+    traits = dict(traits or {})
+    for key, default in _DEFAULT_TRAITS.items():
+        if not traits.get(key):
+            traits[key] = default()
+    return traits
 
 
 def draws_group(traits):
-    return _population_of(traits)["group"] and _composition_of(traits)["shows_group"]
+    traits = filled(traits)
+    return traits["population"]["group"] and traits["composition"]["shows_group"]
 
 
 def draws_foreground_group(traits):
-    return (draws_group(traits) and not _composition_of(traits)["group_only"]
-            and not _body_plan_of(traits)["colonial"])
+    traits = filled(traits)
+    return (draws_group(traits) and not traits["composition"]["group_only"]
+            and not traits["body_plan"]["colonial"])
 
 
 def draws_solo(traits):
-    return (_composition_of(traits)["solo"] and not draws_group(traits)
-            and not _body_plan_of(traits)["colonial"])
+    traits = filled(traits)
+    return (traits["composition"]["solo"] and not draws_group(traits)
+            and not traits["body_plan"]["colonial"])
 
 
 LIMBLESS_NEGATIVE = "legs, arms, paws, claws, hooves, standing on legs, walking"
 
 
 def extra_negative(traits):
-    plan = _body_plan_of(traits)
-    heads = (_composition_of(traits)["negative"], plan["negative"],
+    traits = filled(traits)
+    plan = traits["body_plan"]
+    heads = (traits["composition"]["negative"], plan["negative"],
              LIMBLESS_NEGATIVE if plan["limbs"] == "none" else "")
     parts = [part.strip() for head in heads for part in head.split(",") if part.strip()]
     return ", ".join(dict.fromkeys(parts))
@@ -620,10 +595,11 @@ def _with_directives(prompt, composition, foreground_group, body_plan=None):
 
 
 def generate_profile(target, description, traits):
-    plan = _body_plan_of(traits)
-    size, palette, surface = _size_of(traits), _palette_of(traits), _surface_of(traits)
+    traits = filled(traits)
+    plan, size = traits["body_plan"], traits["size"]
+    palette, surface = traits["palette"], traits["surface"]
+    sample_target, sample_body, sample_sheet, _ = _samples(plan)
     if plan["limbs"] == "count":
-        sample_target, sample_body, sample_sheet = _ZATON, Kyomuton, KyomutonProfile
         sample_traits = ("人間への危険度は「無害。刺激しても壁の隙間へ逃げ込むのみ」、"
                          "個体数は「記録が数例しかない希少種」としてください。"
                          "体長の行は数センチ程度の大きさにし、体色と質感の行は、"
@@ -635,7 +611,6 @@ def generate_profile(target, description, traits):
             f"同じ種類の付属肢は多くても{cap}本までとし、図版で数えて確かめられる本数に収めてください。"
         )
     else:
-        sample_target, sample_body, sample_sheet = _MIZU, Mizumodoki, MizumodokiProfile
         sample_traits = ("人間への危険度は「飲み込むと体内に寄生する。触れるだけなら害はない」、"
                          "個体数は「生息地では普通に見られる」としてください。"
                          "体長の行は数十センチ程度の大きさにし、体色と質感の行は、"
@@ -728,6 +703,12 @@ def generate_scientific_name(target, description):
     return first_line(call_llm(messages))
 
 
+def _samples(plan):
+    if plan["limbs"] == "count":
+        return _ZATON, Kyomuton, KyomutonProfile, KyomutonPrompt
+    return _MIZU, Mizumodoki, MizumodokiProfile, MizumodokiPrompt
+
+
 def _subject_note(composition, foreground_group, plan):
     if foreground_group:
         return "画面には同じ種の個体が多数写りますが、本数を数えられるのは手前の一体だけで構いません。"
@@ -740,17 +721,12 @@ def _subject_note(composition, foreground_group, plan):
 
 
 def generate_prompt(target, description, profile="", traits=None):
-    composition = _composition_of(traits)
-    plan = _body_plan_of(traits)
-    size, palette, surface = _size_of(traits), _palette_of(traits), _surface_of(traits)
+    traits = filled(traits)
+    composition, plan, size = traits["composition"], traits["body_plan"], traits["size"]
+    palette, surface = traits["palette"], traits["surface"]
     foreground_group = draws_foreground_group(traits)
     subject_note = _subject_note(composition, foreground_group, plan)
-    if plan["limbs"] == "count":
-        sample_target, sample_body, sample_sheet, sample_prompt = (
-            _ZATON, Kyomuton, KyomutonProfile, KyomutonPrompt)
-    else:
-        sample_target, sample_body, sample_sheet, sample_prompt = (
-            _MIZU, Mizumodoki, MizumodokiProfile, MizumodokiPrompt)
+    sample_target, sample_body, sample_sheet, sample_prompt = _samples(plan)
     if composition["limb_mode"] == "count" and plan["limbs"] == "none":
         limb_note = (
             "この生物に脚・腕・触手・翼・ひれ・触角はありません。本数は書かず、"
@@ -782,29 +758,28 @@ def generate_prompt(target, description, profile="", traits=None):
         f"さらに、図鑑には載せていない裏設定が以下のとおりです。プロンプトの細部はここから取ってください。"
         f"\n\n{profile}\n\n" if profile.strip() else ""
     )
-    body_note = (
-        f"この生物の体のつくりは「{plan['label']}」——{plan['ja']}——で、"
-        f"英語では次のように書きます: {plan['en']}。この形から外れる描写はしないでください。\n\n"
-        if composition["draws_creature"] else ""
-    )
-    look_note = (
-        f"体色と体表は英語では次のように書きます: {palette['en']}, {surface['en']}。"
-        f"この色と質感は必ずプロンプトに入れ、ほかの色で塗り替えないでください。\n\n"
-        if composition["draws_creature"] else ""
-    )
-    scale_tail = ("残された痕跡の大きさがこれに見合うように書いてください。"
-                  if not composition["draws_creature"]
-                  else "周囲のものとの対比でその大きさが伝わるように書いてください。")
-    scale_note = (
-        f"この生物の大きさは{size['ja']}で、英語では {size['en']} と書きます。{scale_tail}"
-        "説明文や裏設定がこれと違う大きさを書いている場合は、そちらに合わせてください。\n\n"
-        if not composition["magnifies_body"] else ""
-    )
-    group_note = (
-        f"この生物は群れをつくり、画面には同じ姿の個体が多数写ります。英語では次のように指定されています: "
-        f"{GROUP_DIRECTIVE}。群れの密度や、集まっているときの行動が伝わる描写を入れてください。"
-        f"ただし手前の一体は全身がはっきり見えるように書いてください。\n\n" if foreground_group else ""
-    )
+    notes = []
+    if composition["draws_creature"]:
+        notes.append(
+            f"この生物の体のつくりは「{plan['label']}」——{plan['ja']}——で、"
+            f"英語では次のように書きます: {plan['en']}。この形から外れる描写はしないでください。")
+        notes.append(
+            f"体色と体表は英語では次のように書きます: {palette['en']}, {surface['en']}。"
+            f"この色と質感は必ずプロンプトに入れ、ほかの色で塗り替えないでください。")
+    if not composition["magnifies_body"]:
+        scale_tail = ("周囲のものとの対比でその大きさが伝わるように書いてください。"
+                      if composition["draws_creature"]
+                      else "残された痕跡の大きさがこれに見合うように書いてください。")
+        notes.append(
+            f"この生物の大きさは{size['ja']}で、英語では {size['en']} と書きます。{scale_tail}"
+            "説明文や裏設定がこれと違う大きさを書いている場合は、そちらに合わせてください。")
+    if foreground_group:
+        notes.append(
+            f"この生物は群れをつくり、画面には同じ姿の個体が多数写ります。英語では次のように指定されています: "
+            f"{GROUP_DIRECTIVE}。群れの密度や、集まっているときの行動が伝わる描写を入れてください。"
+            f"ただし手前の一体は全身がはっきり見えるように書いてください。")
+    notes.append(limb_note)
+    notes_block = "".join(f"{note}\n\n" for note in notes)
     messages = [
         {
             "role": "user",
@@ -816,11 +791,7 @@ def generate_prompt(target, description, profile="", traits=None):
                 f"\n\n{description}\n\n{profile_block}"
                 f"この絵の構図は「{composition['label']}」で、英語では次のように指定されています: "
                 f"{composition['directive']}。この構図に合う内容だけを書いてください。\n\n"
-                f"{body_note}"
-                f"{look_note}"
-                f"{scale_note}"
-                f"{group_note}"
-                f"{limb_note}\n\n"
+                f"{notes_block}"
                 "プロンプトのみを答え、解説等はしないでください。あなたの出力はそのままStable Diffusionに渡されます。\n\n"
                 "画風・画質・照明の指定は別途こちらで付与するので、あなたは生物の形態と生息環境の描写だけを書いてください。"
                 "masterpiece, best quality, absurdres, 8k, ultra-detailed のような品質タグや、"
@@ -839,8 +810,7 @@ _REVIEW_NEGATIONS = ("no", "not", "without", "missing", "lack", "lacking",
 
 
 def _review_items(prompt, traits):
-    composition = _composition_of(traits)
-    plan = _body_plan_of(traits)
+    composition, plan = traits["composition"], traits["body_plan"]
     items = []
     if composition["draws_creature"]:
         items.append({"key": "body_plan",
@@ -913,6 +883,7 @@ def _parse_review(text, items):
 
 
 def review_image(image, prompt, target, description, profile="", traits=None):
+    traits = filled(traits)
     items = _review_items(prompt, traits)
     checklist = "\n".join(f"{index + 1}. {item['label']}" for index, item in enumerate(items))
     profile_block = f"図鑑には載せていない裏設定: {profile}\n\n" if profile.strip() else ""
@@ -996,63 +967,66 @@ def _sentences(description):
     return [match for match in _SENTENCE.finditer(description) if match.group().strip()]
 
 
-def _revised_sentence(text, original, forbidden):
+def _as_sentence(text):
     text = " ".join(text.split()).strip().strip("「」『』\"'")
+    if text and not text.endswith("。"):
+        text += "。"
+    return text
+
+
+def _keeps_words(text, original, forbidden):
+    return (all(not word or word not in original or word in text for word in forbidden["keep"])
+            and all(not word or word not in text for word in forbidden["hidden"]))
+
+
+def _revised_sentence(text, original, forbidden):
+    text = _as_sentence(text)
     if not text or len(text) > len(original) * 1.5 + 10:
         return ""
-    if not text.endswith("。"):
-        text += "。"
-    if any(word and word in original and word not in text for word in forbidden["keep"]):
-        return ""
-    if any(word and word in text for word in forbidden["hidden"]):
+    if not _keeps_words(text, original, forbidden):
         return ""
     return "" if text == original else text
 
 
-def _spliced(sentences, revised):
-    return [{"span": match.span(), "sentence": match.group().strip(),
-             "ok": index not in revised, "text": revised.get(index, "")}
-            for index, match in enumerate(sentences)]
+def _numbered(sentences):
+    return "\n".join(f"{index + 1}. {match.group().strip()}"
+                     for index, match in enumerate(sentences))
 
 
-def _parse_revisions(text, sentences, revise, first):
+def _sentence_pass(text, sentences, revise, forbidden, max_edits):
     revised, shifted = {}, False
     for line in text.splitlines():
         match = _REVIEW_LINE.match(line)
         if not match:
             continue
         index = int(match.group(1)) - 1
-        if first <= index < len(sentences) and match.group(2).upper() == "NG":
-            fixed = revise(match.group(3), sentences[index].group().strip())
+        if 0 < index < len(sentences) and match.group(2).upper() == "NG":
+            fixed = revise(match.group(3), sentences[index].group().strip(), forbidden)
             shifted = shifted or any(fixed == other.group().strip() for other in sentences)
             if fixed:
                 revised[index] = fixed
-    return revised, shifted
-
-
-def _parse_proof(text, sentences, forbidden):
-    revised, shifted = _parse_revisions(
-        text, sentences,
-        lambda fixed, original: _revised_sentence(fixed, original, forbidden), 1)
-    return _spliced(sentences, {} if shifted or len(revised) > 1 else revised)
+    if shifted or len(revised) > max_edits:
+        revised = {}
+    return [{"span": match.span(), "sentence": match.group().strip(),
+             "ok": index not in revised, "text": revised.get(index, "")}
+            for index, match in enumerate(sentences)]
 
 
 def _proof_forbidden(species, field, traits):
-    plan = _body_plan_of(traits)
+    plan = traits["body_plan"]
     return {"keep": (species, field),
-            "hidden": (_population_of(traits)["label"], (traits or {}).get("danger", ""),
+            "hidden": (traits["population"]["label"], traits.get("danger", ""),
                        plan["label"], plan["ja"])}
 
 
 def review_description(image, description, target, species="", field="", traits=None):
+    traits = filled(traits)
     sentences = _sentences(description)
     forbidden = _proof_forbidden(species, field, traits)
-    composition = _composition_of(traits)
+    composition = traits["composition"]
     if not composition["draws_creature"]:
-        return _parse_proof("", sentences, forbidden)
-    plan = _body_plan_of(traits)
-    numbered = "\n".join(f"{index + 1}. {match.group().strip()}"
-                         for index, match in enumerate(sentences))
+        return _sentence_pass("", sentences, _revised_sentence, forbidden, 1)
+    plan = traits["body_plan"]
     distant_rule = ("・この図版では個体は遠くに小さくしか写りません。"
                     "本数・器官・質感といった体の細部は判断できないものとして扱ってください。\n"
                     if composition["limb_mode"] == "distant" else "")
@@ -1073,7 +1047,7 @@ def review_description(image, description, target, species="", field="", traits=
                         f"これは「{target}」の図鑑に載せる図版です。\n\n"
                         "同じ図鑑に載せる解説文を1文ずつ並べます。"
                         "図版と読み比べて、図版にはっきり写っていることと食い違う文だけを書き直してください。\n\n"
-                        f"{numbered}\n\n"
+                        f"{_numbered(sentences)}\n\n"
                         "判定の規則:\n"
                         f"・この生物が{field}に生息する{species}であること、"
                         f"体のつくりが「{plan['ja']}」であること、名前と学名は、"
@@ -1089,14 +1063,15 @@ def review_description(image, description, target, species="", field="", traits=
                         "・書き直す文は、その番号の文を図版に合うように直した1文だけを書いてください。"
                         "他の文の内容を持ち込まず、元の文と同じ話題・同じ文体・同程度の長さを保ってください。\n"
                         "・一文目はその生物が何であるかを言い切る文なので、常に OK としてください。\n"
-                        f"・{_register_of(traits)['instruction']}\n"
+                        f"・{traits['register']['instruction']}\n"
                         "・判定の行以外は何も書かないでください。"
                     ),
                 },
             ],
         }
     ]
-    return _parse_proof(call_llm(messages, max_tokens=PROOF_MAX_TOKENS), sentences, forbidden)
+    return _sentence_pass(call_llm(messages, max_tokens=PROOF_MAX_TOKENS), sentences,
+                          _revised_sentence, forbidden, 1)
 
 
 def apply_proof(description, review):
@@ -1121,12 +1096,8 @@ def _polish_forbidden(description, name, species, field, traits):
 
 
 def _natural_sentence(text, original, forbidden):
-    text = " ".join(text.split()).strip().strip("「」『』\"'")
-    if not text:
-        return ""
-    if not text.endswith("。"):
-        text += "。"
-    if Levenshtein.distance(text, original) > max(6, len(original) // 3):
+    text = _as_sentence(text)
+    if not text or Levenshtein.distance(text, original) > max(6, len(original) // 3):
         return ""
     if len(original) - len(text) > 6:
         return ""
@@ -1136,25 +1107,22 @@ def _natural_sentence(text, original, forbidden):
         return ""
     if _NUMERALS.findall(text) != _NUMERALS.findall(original):
         return ""
-    if any(word and word in original and word not in text for word in forbidden["keep"]):
-        return ""
-    if any(word and word in text for word in forbidden["hidden"]):
+    if not _keeps_words(text, original, forbidden):
         return ""
     return "" if text == original else text
 
 
 def polish_description(description, name="", species="", field="", traits=None):
+    traits = filled(traits)
     sentences = _sentences(description)
     forbidden = _polish_forbidden(description, name, species, field, traits)
-    numbered = "\n".join(f"{index + 1}. {match.group().strip()}"
-                          for index, match in enumerate(sentences))
     messages = [
         {
             "role": "user",
             "content": (
                 "図鑑に載せる解説文を1文ずつ並べます。"
                 "日本語として不自然なところだけを直してください。\n\n"
-                f"{numbered}\n\n"
+                f"{_numbered(sentences)}\n\n"
                 "直すのは次のような場合だけです:\n"
                 "・助詞が誤っている、主語と述語がねじれている、係り受けが通っていない\n"
                 "・動詞の活用や自動詞・他動詞の使い方が誤っている\n"
@@ -1165,7 +1133,7 @@ def polish_description(description, name="", species="", field="", traits=None):
                 "・硬い言い回し、まわりくどい言い回し、説明の順序\n\n"
                 "次のものは直さないでください:\n"
                 "・書かれている内容。事実・数値・生物の名前・生息地や分類の呼び名は変えないでください。\n"
-                f"・文体と語調。{_register_of(traits)['instruction']}\n"
+                f"・文体と語調。{traits['register']['instruction']}\n"
                 "・文の数。1文を2文に分けたり、2文をまとめたりしないでください。\n"
                 "・言い回しの好み。読んで意味が通る文は、硬くても回りくどくても OK としてください。\n\n"
                 f"・1行に1文、1から{len(sentences)}まで順に、"
@@ -1177,11 +1145,8 @@ def polish_description(description, name="", species="", field="", traits=None):
             ),
         }
     ]
-    text = call_llm(messages, max_tokens=POLISH_MAX_TOKENS)
-    revised, shifted = _parse_revisions(
-        text, sentences,
-        lambda fixed, original: _natural_sentence(fixed, original, forbidden), 1)
-    return _spliced(sentences, {} if shifted or len(revised) > POLISH_MAX_EDITS else revised)
+    return _sentence_pass(call_llm(messages, max_tokens=POLISH_MAX_TOKENS), sentences,
+                          _natural_sentence, forbidden, POLISH_MAX_EDITS)
 
 
 def _description_request(target, ja, register, opener=""):
@@ -1192,8 +1157,8 @@ def _description_request(target, ja, register, opener=""):
 
 
 def generate_description(target, traits=None):
-    plan = _body_plan_of(traits)
-    register = _register_of(traits)
+    traits = filled(traits)
+    plan, register = traits["body_plan"], traits["register"]
     messages = []
     for phrase, text in register["samples"]:
         sample_plan = _PLAN_LABELS[_SAMPLE_PLANS[phrase]]

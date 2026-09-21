@@ -123,35 +123,37 @@ def require_models():
             + "\nmodels/comfyui/ 以下の配置を CLAUDE.md の Image models 節で確認してください")
 
 
+def _await_images(prompt_id, timeout):
+    deadline = time.time() + timeout
+    while True:
+        entry = _request(f"/history/{prompt_id}").get(prompt_id)
+        status = (entry or {}).get("status", {})
+        if status.get("status_str") == "error":
+            raise RuntimeError(f"ComfyUI generation failed: {json.dumps(status, ensure_ascii=False)[:2000]}")
+        images = [img for out in (entry or {}).get("outputs", {}).values()
+                  for img in out.get("images", [])]
+        if images:
+            return images
+        if time.time() > deadline:
+            raise TimeoutError(f"ComfyUI did not return an image within {timeout}s")
+        time.sleep(1)
+
+
 def get_image(prompt, negative_prompt=NEGATIVE_PROMPT, width=GEN_WIDTH, height=GEN_HEIGHT,
               seed=None, steps=STEPS, cfg=CFG, timeout=600, extra_negative="", solo=True,
               inside_body=False):
     if seed is None:
         seed = random.randint(0, 2 ** 63 - 1)
-    if solo:
-        negative_prompt = f"{negative_prompt}, {SOLO_NEGATIVE}"
-    if not inside_body:
-        negative_prompt = f"{negative_prompt}, {CUTAWAY_NEGATIVE}"
-    if extra_negative.strip():
-        negative_prompt = f"{negative_prompt}, {extra_negative.strip()}"
+    negative_prompt = ", ".join(part for part in (
+        negative_prompt,
+        SOLO_NEGATIVE if solo else "",
+        "" if inside_body else CUTAWAY_NEGATIVE,
+        extra_negative.strip(),
+    ) if part)
 
     workflow = _build_workflow(f"{STYLE_PREFIX}, {prompt}", negative_prompt, width, height, seed, steps, cfg)
     prompt_id = _request("/prompt", {"prompt": workflow})["prompt_id"]
-
-    deadline = time.time() + timeout
-    images = []
-    while not images:
-        entry = _request(f"/history/{prompt_id}").get(prompt_id)
-        if entry:
-            status = entry.get("status", {})
-            if status.get("status_str") == "error":
-                raise RuntimeError(f"ComfyUI generation failed: {json.dumps(status, ensure_ascii=False)[:2000]}")
-            images = [img for out in entry.get("outputs", {}).values()
-                      for img in out.get("images", [])]
-        if not images:
-            if time.time() > deadline:
-                raise TimeoutError(f"ComfyUI did not return an image within {timeout}s")
-            time.sleep(1)
+    images = _await_images(prompt_id, timeout)
 
     query = urllib.parse.urlencode({
         "filename": images[0]["filename"],
@@ -222,7 +224,7 @@ def getLineBreak(text, font, max_width):
     for i, token in enumerate(tokens):
         word = token.surface
         part_of_speech = token.part_of_speech.split(',')[0]
-        if part_of_speech in ("名詞"):
+        if part_of_speech == "名詞":
             if chunk:
                 chunks.append(chunk)
             chunk = word

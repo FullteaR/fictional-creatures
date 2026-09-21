@@ -146,6 +146,31 @@ def _png_metadata(card):
     return info
 
 
+def _draw_plate(run, prompt, seed, inside_body, traits, review):
+    negative = extra_negative(traits)
+    solo = draws_solo(traits)
+    current, notes, plates, rounds = prompt, "", [], []
+    while True:
+        plate_negative = ", ".join(part for part in (negative, notes) if part)
+        plates.append(run("draft" if not rounds else "final", lambda: get_image(
+            current, extra_negative=plate_negative, solo=solo, seed=seed,
+            inside_body=inside_body)))
+        verdicts = run("review", lambda: review(plates[-1], current))
+        rounds.append({"prompt": current, "negative": notes,
+                       "review": review_payload(verdicts)})
+        if all(entry["ok"] for entry in verdicts) or len(rounds) > REVIEW_RETRIES:
+            break
+        if len(rounds) > 1 and _unmatched(rounds[-1]) >= _unmatched(rounds[-2]):
+            break
+        fixed, found = apply_review(current, verdicts)
+        merged = _merge_negative(notes, found)
+        if fixed == current and merged == notes:
+            break
+        current, notes = fixed, merged
+    chosen = min(range(len(rounds)), key=lambda index: _unmatched(rounds[index]))
+    return plates[chosen], rounds, chosen
+
+
 def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT_DIR):
     started = time.time()
     notify = emit if emit is not None else (lambda event: None)
@@ -172,8 +197,7 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
     notify({"type": "step", "step": "name", "status": "done"})
     field_done("name", name)
 
-    description = run("description", lambda: generate_description(target, traits))
-    description = description.strip()
+    description = run("description", lambda: generate_description(target, traits)).strip()
     field_done("description", description)
 
     scientific_name = run("scientific_name",
@@ -186,32 +210,11 @@ def generate_card(emit=None, *, name=None, field=None, species=None, out_dir=OUT
     prompt = run("prompt", lambda: generate_prompt(target, description, profile, traits)).strip()
     field_done("prompt", prompt)
 
-    negative = extra_negative(traits)
-    solo = draws_solo(traits)
-    inside_body = field.endswith(INSIDE_BODY_SUFFIX)
-
     seed = random.getrandbits(63)
-    current, notes, plates, rounds = prompt, "", [], []
-    while True:
-        plate_negative = ", ".join(part for part in (negative, notes) if part)
-        plates.append(run("draft" if not rounds else "final", lambda: get_image(
-            current, extra_negative=plate_negative, solo=solo, seed=seed,
-            inside_body=inside_body)))
-        review = run("review", lambda: review_image(
-            plates[-1], current, target, description, profile, traits))
-        rounds.append({"prompt": current, "negative": notes, "review": review_payload(review)})
-        if all(entry["ok"] for entry in review) or len(rounds) > REVIEW_RETRIES:
-            break
-        if len(rounds) > 1 and _unmatched(rounds[-1]) >= _unmatched(rounds[-2]):
-            break
-        fixed, found = apply_review(current, review)
-        merged = _merge_negative(notes, found)
-        if fixed == current and merged == notes:
-            break
-        current, notes = fixed, merged
-
-    chosen = min(range(len(rounds)), key=lambda index: _unmatched(rounds[index]))
-    background = plates[chosen]
+    background, rounds, chosen = _draw_plate(
+        run, prompt, seed, field.endswith(INSIDE_BODY_SUFFIX), traits,
+        lambda plate, current: review_image(plate, current, target, description,
+                                            profile, traits))
     refined = rounds[chosen]["prompt"]
     field_done("refined_prompt", refined)
 
