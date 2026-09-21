@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir \
 	tqdm \
 	Pillow \
 	janome \
+	pytest \
 	python-Levenshtein \
 	openai
 

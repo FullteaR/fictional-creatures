@@ -21,6 +21,9 @@ All services run via Docker Compose. GPU is required.
 # Start everything (downloads LLM, starts llama-server + ComfyUI, starts Jupyter)
 docker compose up
 
+# Unit tests — no GPU, no LLM, ~4s
+docker compose exec app python -m pytest /mnt/tests -q
+
 # Web UI — generate and browse the collection from a browser
 # http://localhost:28081
 
@@ -277,12 +280,42 @@ llama-server also warns that Qwen-VL wants `--image-min-tokens 1024` for groundi
 
 Uses the `openai` Python client pointed at the local llama-server (`LLAMA_SERVER_URL` env var, default `http://llama-server:8080/v1`). Responses are streamed and echoed token-by-token as they arrive — to stdout by default, or to whatever `token_sink` is set to (see *Web UI*). `call_llm` sets `max_tokens` (default 2048) and warns when a generation is truncated — without a cap a repetition loop runs until it exhausts the context and takes llama-server down with it.
 
+### Tests
+
+`src/tests/` is 93 pytest tests over the pure functions, and it runs in about four seconds without
+the GPU, the LLM or ComfyUI:
+
+```bash
+docker compose exec app python -m pytest /mnt/tests -q
+```
+
+They cover the four places where behaviour is decided in code rather than by a model, which is
+exactly where a regression is invisible: where a line may break (`test_linebreak.py`), what a
+correction may change to a sentence (`test_sentences.py`), how a verdict becomes a prompt
+(`test_review.py`), what the dice may deal (`test_traits.py`) and what each call is told
+(`test_prompt.py`). Every rule that *Hidden settings*, *Correcting the card against the plate* and
+*Breaking the caption into lines* describe has a test named after it, and the table schemas are
+asserted key by key, so adding a row to `COMPOSITIONS` and forgetting `palette` fails a test
+rather than a generation.
+
+**They were written against mutations, not against the code.** A test that cannot fail is worse
+than no test, and three of the first batch could not: the suffix test passed because the
+noun-after-noun rule already covered 登山/者; `_parts` was only asserted to be non-empty, so
+deleting its head filter changed nothing; and the apply_review test used a fix phrase that was
+already at the head of the prompt, so promoting it again was a no-op. The polish guards were worse
+— removing the new-kanji rule broke nothing, because 生きている→食べている is also a tail-only edit
+and the tail rule caught it. Each guard now has a case that trips **it and nothing else**, checked
+by measuring the distance, the shortening, the tail and the kanji of every case. Twenty-four
+mutations — one per rule, each deleting or loosening it in the source — are all caught.
+
+
 ### Key files
 
 | File | Purpose |
 |------|---------|
 | `src/pipeline.py` | One card, start to finish — the shared entry point for both front ends |
 | `src/monster-generator.ipynb` | Notebook front end: preflight, the loop, the contact sheet |
+| `src/tests/` | Unit tests for everything decided in code — see *Tests* above |
 | `web/server.py` | The button: start one card, report status, serve the PNG |
 | `web/static/` | The page itself (no build step) |
 | `src/textGenerateUtils.py` | LLM calls: description, profile, SD prompt, scientific name, the review of the draft plate, the proofread of the description against the finished one, the polish of its Japanese |

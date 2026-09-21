@@ -232,6 +232,8 @@ def tokenizer():
 
 def _starts_word(kind, detail, previous):
     previous_kind, previous_detail = previous
+    if previous_detail == "括弧開":
+        return False
     if detail == "括弧開":
         return True
     if kind not in WORD_HEADS or detail in WORD_TAILS:
