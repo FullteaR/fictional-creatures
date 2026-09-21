@@ -437,7 +437,7 @@ REGISTERS = [
     {"weight": 50, "label": "図鑑の記述",
      "instruction": "観察された事実だけを淡々と、図鑑の解説文の調子で書いてください。",
      "samples": ((_BURIRIA, EsukaKnight), (_MIZU, Mizumodoki), (_ZATON, Kyomuton))},
-    {"weight": 25, "label": "土地の伝承",
+    {"weight": 10, "label": "土地の伝承",
      "instruction": "その土地に伝わる言い伝えや俗信を交えて、"
                     "どう呼ばれ、どう扱われてきたかを書いてください。",
      "samples": ((_ZATON, KyomutonDenshou), (_MIZU, MizumodokiDenshou))},
