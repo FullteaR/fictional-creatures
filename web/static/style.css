@@ -11,30 +11,34 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
-  display: grid; place-items: center;
+  display: grid; place-items: center; align-items: safe center;
   overflow-x: hidden;
-  min-height: 100vh; margin: 0; padding: 3rem 1rem 4rem;
+  min-height: 100svh; margin: 0; padding: 1.6rem 1rem;
   background: var(--board); color: var(--ink);
   font-family: "EB Garamond", "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
   font-size: 16px;
   font-feature-settings: "palt" 1;
 }
 
-main { width: min(800px, 100%); text-align: center; }
+main {
+  width: min(800px, 100%); text-align: center;
+  --page: min(100%, calc((100svh - 18.5rem) * 5 / 3));
+}
 
 h1 {
-  margin: 0 0 2.5rem;
-  font-size: 1.05rem; font-weight: 400; letter-spacing: .42em;
+  margin: 0 0 1.2rem;
+  font-size: 1.05rem; font-weight: 400; line-height: 1.2; letter-spacing: .42em;
   color: var(--ink-soft); text-indent: .42em;
 }
 
 #go {
-  padding: .85rem clamp(1.5rem, 8vw, 4rem);
+  padding: .7rem clamp(1.4rem, 7vw, 3.4rem);
   border: 1px solid var(--ink); border-radius: 0;
   background: var(--ink); color: var(--sheet);
-  font: inherit; font-size: 1.3rem; font-weight: 800; letter-spacing: .5em;
+  font: inherit; font-size: 1.2rem; font-weight: 800; line-height: 1.2; letter-spacing: .5em;
   text-indent: .5em;
   cursor: pointer;
   transition: background .12s ease-out, color .12s ease-out;
@@ -44,13 +48,13 @@ h1 {
 #go:focus-visible { outline: 2px solid var(--stamp); outline-offset: 3px; }
 
 #note {
-  margin: 1.4rem 0 0; min-height: 1.5em;
+  margin: .7rem 0 0; min-height: 1.5em;
   color: var(--ink-faint); font-size: .88rem; letter-spacing: .08em;
 }
 #note.is-alarm { color: var(--alarm); overflow-wrap: anywhere; }
 #note b { font-weight: 400; font-variant-numeric: tabular-nums; }
 
-#book { margin: 2.75rem 0 0; }
+#book { width: var(--page); margin: 1.2rem auto 0; }
 #book:empty { margin: 0; }
 
 .plate {
@@ -62,20 +66,25 @@ h1 {
 .plate.turns-forward { animation: turn-forward .38s cubic-bezier(.2, .7, .3, 1); }
 .plate.turns-back { animation: turn-back .38s cubic-bezier(.2, .7, .3, 1); }
 
-#keep { margin: 1.1rem .1rem 0; text-align: right; }
+#controls {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  width: var(--page); margin: .7rem auto 0;
+}
+
+#keep { grid-column: 3; justify-self: end; margin: 0 .1rem; }
 #keep a {
-  display: inline-block; padding: .38rem 1.2rem;
+  display: inline-block; padding: .32rem .9rem;
   border: 1px solid var(--keyline);
-  color: var(--ink-soft); text-decoration: none;
-  font-size: .82rem; letter-spacing: .22em; text-indent: .22em;
+  color: var(--ink-soft); text-decoration: none; white-space: nowrap;
+  font-size: .78rem; line-height: 1.2; letter-spacing: .16em; text-indent: .16em;
   transition: color .12s ease-out, border-color .12s ease-out;
 }
 #keep a:hover { color: var(--stamp); border-color: var(--stamp); }
 #keep a:focus-visible { outline: 2px solid var(--stamp); outline-offset: 3px; }
 
 #pager {
+  grid-column: 2;
   display: flex; align-items: center; justify-content: center; gap: 1.6rem;
-  margin: 1.4rem 0 0;
 }
 #pager button {
   width: 2.4rem; padding: .1rem 0;
@@ -94,10 +103,10 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-footer { margin: 3.5rem 0 0; }
+footer { margin: 1.2rem 0 0; }
 footer a {
   color: var(--ink-faint); opacity: .45; text-decoration: none;
-  font-size: .68rem; letter-spacing: .14em;
+  font-size: .68rem; line-height: 1.2; letter-spacing: .14em;
   transition: opacity .12s ease-out, color .12s ease-out;
 }
 footer a:hover { opacity: 1; color: var(--stamp); }

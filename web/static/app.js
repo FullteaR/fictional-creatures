@@ -1,7 +1,7 @@
 const go = document.getElementById("go");
 const note = document.getElementById("note");
 const book = document.getElementById("book");
-const keep = document.getElementById("keep");
+const controls = document.getElementById("controls");
 const save = document.getElementById("save");
 const pager = document.getElementById("pager");
 const back = document.getElementById("back");
@@ -32,8 +32,8 @@ function turn(index, direction) {
   void page.offsetWidth;
   page.classList.add(direction);
   save.href = `/api/image/${encodeURIComponent(page.dataset.image)}`;
-  save.download = page.dataset.image;
-  keep.hidden = false;
+  save.download = page.dataset.name;
+  controls.hidden = false;
   count.textContent = `${at + 1} / ${pages.length}`;
   back.disabled = at === 0;
   forward.disabled = at === pages.length - 1;
@@ -46,6 +46,7 @@ function place(image) {
   page.className = "plate";
   page.hidden = true;
   page.dataset.image = image;
+  page.dataset.name = image.replace(/^\d{8}-\d{6}-/, "");
   const plate = document.createElement("img");
   plate.src = `/api/image/${encodeURIComponent(image)}`;
   plate.alt = "観察された図版";

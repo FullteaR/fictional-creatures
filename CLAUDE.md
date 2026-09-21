@@ -256,15 +256,38 @@ for whatever wants to read it.
 The pager appears on the second card and disables at each end rather than wrapping, ← and → turn
 the page too, and a turn animates from the side it came from (`turn-back` / `turn-forward`), which
 is the whole of the page-turning. It moves the sheet 26px, so `body` is `overflow-x: hidden` to
-keep that from showing a scrollbar for a third of a second.
+keep that from showing a scrollbar for a third of a second. `[hidden]` is forced with `!important`
+because `#controls` and `#pager` declare a `display` of their own: an author rule with an id beats
+the UA stylesheet's `[hidden]`, so until it was added a reload during a generation showed the pager
+and the save button hanging over an empty book, both arrows live and no page number between them.
+
+**The page is meant to be seen at once, not scrolled.** Laid out at its natural size it came to
+~990px and the pager fell below the fold on an ordinary laptop, which is no way to turn a page. The
+plate is now sized from the height left over — `--page` is `min(100%, (100svh - 18.5rem) * 5 / 3)`,
+where 5/3 is the plate's aspect and 18.5rem is everything else on the page added up: the title, the
+button, the status line, the sheet's own border and padding, the controls row and the colophon.
+Above 776px of viewport the plate is its full 800 wide; below that it shrinks instead of pushing
+the controls off screen, and at 700px — a 1440×900 laptop with its browser chrome — the plate is
+673 and the page comes to 682. Everything in that sum is set as tight as it reads: the save button
+shares the pager's row rather than taking one of its own, and every margin around it was cut once
+again when the plate came out too small, which between them is 56px of chrome and 93px of plate
+width. The line heights of the title, the button and the two link lines are pinned so the 18.5rem
+stays true whatever the font stack does. `align-items: safe center` is the backstop: if something
+does push past the viewport — a long error in the status line is the likely one — the top stays
+reachable instead of being centred out of reach.
 
 The page is `web/static/` — plain HTML/CSS/JS, no build step, mounted rather than baked into the
 image so an edit needs only `docker compose restart webui`. The page being shown is saved from a
 button under the plate's right corner, drawn like the pager's — `<a download>` pointed at the same
-`/api/image/` the plate itself came from and named after the card, so nothing was added to the
-server for it. The repository is linked from a colophon line at the foot of the page, set the size
-and weight such a line is usually set, which is a good deal quieter than the button: the two are
-the only text on the page that is not the card, and only one of them is there to be pressed.
+`/api/image/` the plate itself came from, so nothing was added to the server for it. What it saves
+as is the creature: the timestamp that keeps `src/endemic/` ordered and collision-free is the
+collection's business, not the reader's, so `download` carries the name with the stamp stripped off
+— `20260921-014220-キングハイド.png` is saved as `キングハイド.png`. Its label is `nowrap`, since
+Japanese breaks between any two characters and 「↓ 保存」 came apart over two lines on a short
+window rather than making the grid track it sits in any wider. The repository is linked from a
+colophon line at the foot of the page, set the size and weight such a line is usually set, which is
+a good deal quieter than the button: the two are the only text on the page that is not the card,
+and only one of them is there to be pressed.
 
 ### Breaking the caption into lines
 
